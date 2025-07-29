@@ -1,0 +1,101 @@
+Question Utilisateur;Réponse Attendue;Intention;Catégorie;Doit Utiliser RAG (Oui/Non);Contextes Attendus (si RAG);Exact Match possible (Oui/Non)
+Je veux un prêt;Merci pour votre demande, un conseiller vous contactera sous peu.;Demande de crédit;Marketing;Oui;Carte expirée;Oui
+je n'arrive pas à faire un prelevement;Veuillez patienter, nous traitons votre requête.;Recharge compte;Support;Non;;Non
+compte bmci mobile bloqué;Voici les informations demandées.;Compte bloqué;Support;Oui;Inscription Masrvi;Non
+assistance technique sur masrvi;Voici les informations demandées.;Probleme technique;Support;Non;;Oui
+assistance technique sur masrvi;Veuillez patienter, nous traitons votre requête.;Probleme technique;Support;Oui;RIB;Oui
+je n'arrive pas à faire un prelevement;Veuillez patienter, nous traitons votre requête.;Recharge compte;Support;Oui;Compte bloqué;Non
+compte bmci mobile bloqué;Merci de fournir plus d'informations pour poursuivre.;Compte bloqué;Support;Non;;Oui
+compte bmci mobile bloqué;Voici les informations demandées.;Compte bloqué;Support;Oui;Virement;Non
+comment inscrire à masrvi;Voici les informations demandées.;Inscription au service masrvi;Marketing;Non;;Non
+je n'arrive pas à faire un prelevement;Merci de fournir plus d'informations pour poursuivre.;Recharge compte;Support;Non;;Non
+comment inscrire à masrvi;Voici les informations demandées.;Inscription au service masrvi;Marketing;Oui;RIB;Oui
+assistance technique sur masrvi;Merci de fournir plus d'informations pour poursuivre.;Probleme technique;Support;Non;;Oui
+je n'ai pas reçu le code de confirmation;Veuillez patienter, nous traitons votre requête.;Reception code OTP;Support;Oui;Inscription Masrvi;Non
+je n'arrive pas à faire un prelevement;Voici les informations demandées.;Recharge compte;Support;Non;;Non
+je n'arrive pas à faire un prelevement;Voici les informations demandées.;Recharge compte;Support;Oui;Inscription Masrvi;Non
+compte bmci mobile bloqué;Veuillez patienter, nous traitons votre requête.;Compte bloqué;Support;Oui;Compte bloqué;Oui
+je n'ai pas reçu le code de confirmation;Voici les informations demandées.;Reception code OTP;Support;Non;;Non
+Quels types de crédits proposez-vous ?;Merci de fournir plus d'informations pour poursuivre.;Demande de crédit;Marketing;Non;;Non
+compte bmci mobile bloqué;Voici les informations demandées.;Compte bloqué;Support;Oui;Compte bloqué;Non
+assistance technique sur masrvi;Merci de fournir plus d'informations pour poursuivre.;Probleme technique;Support;Non;;Oui
+assistance technique sur masrvi;Voici les informations demandées.;Probleme technique;Support;Non;;Oui
+Reclamation Gimtel;Voici les informations demandées.;Transfert Gimtel;Support;Non;;Oui
+je n'ai pas reçu le code de confirmation;Merci de fournir plus d'informations pour poursuivre.;Reception code OTP;Support;Oui;RIB;Oui
+les documents requis pour ouvrir un compte;Merci de fournir plus d'informations pour poursuivre.;Ouverture de compte;Marketing;Non;;Non
+Reclamation Gimtel;Merci de fournir plus d'informations pour poursuivre.;Transfert Gimtel;Support;Non;;Oui
+infos sur la carte  visa prépayée;Merci de fournir plus d'informations pour poursuivre.;Demande carte visa prépayée;Marketing;Oui;Inscription Masrvi;Oui
+assistance technique sur masrvi;Veuillez patienter, nous traitons votre requête.;Probleme technique;Support;Oui;Compte bloqué;Oui
+compte bmci mobile bloqué;Veuillez patienter, nous traitons votre requête.;Compte bloqué;Support;Oui;Relevé de compte;Non
+les documents requis pour ouvrir un compte;Merci de fournir plus d'informations pour poursuivre.;Ouverture de compte;Marketing;Oui;Inscription Masrvi;Oui
+infos sur la carte  visa prépayée;Merci de fournir plus d'informations pour poursuivre.;Demande carte visa prépayée;Marketing;Oui;Virement;Non
+Je n'arrive pas à accéder à mon compte;Merci pour votre demande, un conseiller vous contactera sous peu.;Compte bloqué;Support;Oui;Virement;Non
+compte bmci mobile bloqué;Merci de fournir plus d'informations pour poursuivre.;Compte bloqué;Support;Non;;Oui
+comment inscrire à masrvi;Merci pour votre demande, un conseiller vous contactera sous peu.;Inscription au service masrvi;Marketing;Oui;Carte expirée;Oui
+je n'arrive pas à faire un prelevement;Voici les informations demandées.;Recharge compte;Support;Oui;Virement;Non
+je n'arrive pas à faire un prelevement;Veuillez patienter, nous traitons votre requête.;Recharge compte;Support;Oui;Compte bloqué;Non
+Reclamation Gimtel;Veuillez patienter, nous traitons votre requête.;Transfert Gimtel;Support;Oui;Inscription Masrvi;Oui
+Je n'arrive pas à accéder à mon compte;Voici les informations demandées.;Compte bloqué;Support;Oui;Virement;Non
+assistance technique sur masrvi;Merci pour votre demande, un conseiller vous contactera sous peu.;Probleme technique;Support;Non;;Oui
+Mon compte est bloqué;Veuillez patienter, nous traitons votre requête.;Compte bloqué;Support;Oui;RIB;Oui
+assistance technique sur masrvi;Voici les informations demandées.;Probleme technique;Support;Oui;Compte bloqué;Oui
+Quels types de crédits proposez-vous ?;Merci pour votre demande, un conseiller vous contactera sous peu.;Demande de crédit;Marketing;Oui;Compte bloqué;Oui
+Quels types de crédits proposez-vous ?;Merci de fournir plus d'informations pour poursuivre.;Demande de crédit;Marketing;Non;;Oui
+je n'arrive pas à faire un prelevement;Merci pour votre demande, un conseiller vous contactera sous peu.;Recharge compte;Support;Non;;Non
+Reclamation Gimtel;Voici les informations demandées.;Transfert Gimtel;Support;Non;;Non
+compte bmci mobile bloqué;Merci de fournir plus d'informations pour poursuivre.;Compte bloqué;Support;Oui;Relevé de compte;Non
+comment inscrire à masrvi;Merci de fournir plus d'informations pour poursuivre.;Inscription au service masrvi;Marketing;Non;;Non
+Reclamation Gimtel;Veuillez patienter, nous traitons votre requête.;Transfert Gimtel;Support;Non;;Non
+je n'arrive pas à faire un prelevement;Merci pour votre demande, un conseiller vous contactera sous peu.;Recharge compte;Support;Non;;Non
+Je veux un prêt;Merci de fournir plus d'informations pour poursuivre.;Demande de crédit;Marketing;Oui;RIB;Non
+Je veux un prêt;Veuillez patienter, nous traitons votre requête.;Demande de crédit;Marketing;Oui;Relevé de compte;Non
+Reclamation Gimtel;Voici les informations demandées.;Transfert Gimtel;Support;Non;;Oui
+assistance technique sur masrvi;Merci pour votre demande, un conseiller vous contactera sous peu.;Probleme technique;Support;Non;;Non
+Reclamation Gimtel;Merci pour votre demande, un conseiller vous contactera sous peu.;Transfert Gimtel;Support;Non;;Non
+je n'arrive pas à faire un prelevement;Veuillez patienter, nous traitons votre requête.;Recharge compte;Support;Oui;Carte expirée;Oui
+assistance technique sur masrvi;Merci de fournir plus d'informations pour poursuivre.;Probleme technique;Support;Non;;Oui
+je n'arrive pas à faire un prelevement;Merci pour votre demande, un conseiller vous contactera sous peu.;Recharge compte;Support;Non;;Oui
+Reclamation Gimtel;Merci pour votre demande, un conseiller vous contactera sous peu.;Transfert Gimtel;Support;Oui;Inscription Masrvi;Non
+Je n'arrive pas à accéder à mon compte;Voici les informations demandées.;Compte bloqué;Support;Oui;Relevé de compte;Oui
+compte bmci mobile bloqué;Merci pour votre demande, un conseiller vous contactera sous peu.;Compte bloqué;Support;Non;;Oui
+je n'arrive pas à faire un prelevement;Merci de fournir plus d'informations pour poursuivre.;Recharge compte;Support;Oui;Virement;Non
+Je veux un prêt;Voici les informations demandées.;Demande de crédit;Marketing;Oui;Compte bloqué;Oui
+les documents requis pour ouvrir un compte;Merci de fournir plus d'informations pour poursuivre.;Ouverture de compte;Marketing;Non;;Non
+compte bmci mobile bloqué;Merci de fournir plus d'informations pour poursuivre.;Compte bloqué;Support;Oui;Virement;Non
+infos sur la carte  visa prépayée;Merci pour votre demande, un conseiller vous contactera sous peu.;Demande carte visa prépayée;Marketing;Non;;Non
+Quels types de crédits proposez-vous ?;Merci pour votre demande, un conseiller vous contactera sous peu.;Demande de crédit;Marketing;Oui;Relevé de compte;Non
+je n'ai pas reçu le code de confirmation;Merci pour votre demande, un conseiller vous contactera sous peu.;Reception code OTP;Support;Oui;Relevé de compte;Non
+Reclamation Gimtel;Merci pour votre demande, un conseiller vous contactera sous peu.;Transfert Gimtel;Support;Non;;Non
+Reclamation Gimtel;Voici les informations demandées.;Transfert Gimtel;Support;Non;;Non
+Mon compte est bloqué;Merci de fournir plus d'informations pour poursuivre.;Compte bloqué;Support;Non;;Non
+comment inscrire à masrvi;Merci de fournir plus d'informations pour poursuivre.;Inscription au service masrvi;Marketing;Non;;Oui
+Reclamation Gimtel;Merci pour votre demande, un conseiller vous contactera sous peu.;Transfert Gimtel;Support;Oui;Compte bloqué;Non
+je n'ai pas reçu le code de confirmation;Veuillez patienter, nous traitons votre requête.;Reception code OTP;Support;Non;;Oui
+infos sur la carte  visa prépayée;Veuillez patienter, nous traitons votre requête.;Demande carte visa prépayée;Marketing;Non;;Non
+assistance technique sur masrvi;Merci pour votre demande, un conseiller vous contactera sous peu.;Probleme technique;Support;Oui;Carte expirée;Non
+assistance technique sur masrvi;Merci de fournir plus d'informations pour poursuivre.;Probleme technique;Support;Oui;Inscription Masrvi;Oui
+je n'ai pas reçu le code de confirmation;Merci de fournir plus d'informations pour poursuivre.;Reception code OTP;Support;Non;;Non
+Reclamation Gimtel;Veuillez patienter, nous traitons votre requête.;Transfert Gimtel;Support;Non;;Non
+je n'arrive pas à faire un prelevement;Merci pour votre demande, un conseiller vous contactera sous peu.;Recharge compte;Support;Non;;Non
+Reclamation Gimtel;Voici les informations demandées.;Transfert Gimtel;Support;Non;;Oui
+je n'ai pas reçu le code de confirmation;Veuillez patienter, nous traitons votre requête.;Reception code OTP;Support;Non;;Non
+infos sur la carte  visa prépayée;Veuillez patienter, nous traitons votre requête.;Demande carte visa prépayée;Marketing;Non;;Oui
+Mon compte est bloqué;Merci pour votre demande, un conseiller vous contactera sous peu.;Compte bloqué;Support;Oui;Inscription Masrvi;Non
+compte bmci mobile bloqué;Merci de fournir plus d'informations pour poursuivre.;Compte bloqué;Support;Oui;Inscription Masrvi;Oui
+infos sur la carte  visa prépayée;Veuillez patienter, nous traitons votre requête.;Demande carte visa prépayée;Marketing;Oui;Inscription Masrvi;Oui
+compte bmci mobile bloqué;Voici les informations demandées.;Compte bloqué;Support;Oui;Relevé de compte;Oui
+Mon compte est bloqué;Voici les informations demandées.;Compte bloqué;Support;Non;;Oui
+comment inscrire à masrvi;Merci de fournir plus d'informations pour poursuivre.;Inscription au service masrvi;Marketing;Non;;Oui
+compte bmci mobile bloqué;Veuillez patienter, nous traitons votre requête.;Compte bloqué;Support;Non;;Non
+les documents requis pour ouvrir un compte;Voici les informations demandées.;Ouverture de compte;Marketing;Oui;Relevé de compte;Non
+Quels types de crédits proposez-vous ?;Merci pour votre demande, un conseiller vous contactera sous peu.;Demande de crédit;Marketing;Oui;Relevé de compte;Oui
+compte bmci mobile bloqué;Merci de fournir plus d'informations pour poursuivre.;Compte bloqué;Support;Oui;Virement;Non
+Je veux un prêt;Merci de fournir plus d'informations pour poursuivre.;Demande de crédit;Marketing;Oui;Virement;Non
+infos sur la carte  visa prépayée;Voici les informations demandées.;Demande carte visa prépayée;Marketing;Oui;Inscription Masrvi;Oui
+je n'arrive pas à faire un prelevement;Veuillez patienter, nous traitons votre requête.;Recharge compte;Support;Oui;Virement;Oui
+Quels types de crédits proposez-vous ?;Merci pour votre demande, un conseiller vous contactera sous peu.;Demande de crédit;Marketing;Non;;Non
+Reclamation Gimtel;Voici les informations demandées.;Transfert Gimtel;Support;Oui;RIB;Non
+assistance technique sur masrvi;Veuillez patienter, nous traitons votre requête.;Probleme technique;Support;Oui;Virement;Oui
+je n'ai pas reçu le code de confirmation;Voici les informations demandées.;Reception code OTP;Support;Non;;Non
+je n'arrive pas à faire un prelevement;Merci pour votre demande, un conseiller vous contactera sous peu.;Recharge compte;Support;Oui;Virement;Oui
+compte bmci mobile bloqué;Veuillez patienter, nous traitons votre requête.;Compte bloqué;Support;Oui;Compte bloqué;Oui

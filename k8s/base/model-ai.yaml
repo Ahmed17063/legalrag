@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-ai
+  labels:
+    app: model-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: model-ai
+  template:
+    metadata:
+      labels:
+        app: model-ai
+    spec:
+      imagePullSecrets:
+      - name: regcred
+      containers:
+      - name: model-ai
+        image: registry.gitlab.com/bmci/chatbotai/model-ai:0.1-SNAPSHOT
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5002
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-ai
+  labels:
+    app: model-ai
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      protocol: TCP
+      port: 5002
+      targetPort: 5002
+  selector:
+    app: model-ai
