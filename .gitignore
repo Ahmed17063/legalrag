@@ -33,3 +33,13 @@ dist-ssr
 *.sln
 *.sw?
 
+
+# Environnements virtuels uv / python (le motif venv*/ ci-dessus ne matche pas .venv)
+.venv/
+**/.venv/
+
+# Cache uv
+.uv/
+
+# Réglages Claude Code personnels
+.claude/settings.local.json
