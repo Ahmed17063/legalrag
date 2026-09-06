@@ -101,15 +101,42 @@ def detecter_langue(texte: str) -> str:
 
 
 def nom_de_document(chemin: Path, titre_pdf: str | None = None) -> str:
-    """Deduit un titre lisible, a partir des metadonnees ou du nom de fichier.
+    """Deduit un titre lisible : le nom de fichier d'abord.
 
-    Les metadonnees priment quand elles existent et sont credibles : bien
-    des PDF portent un titre de logiciel ("Microsoft Word - doc1") qui ne
-    vaut pas mieux que le nom de fichier.
+    Le nom de fichier prime sur les metadonnees, contrairement a
+    l'intuition. Sur un recueil juridique reel, onze PDF sur douze
+    portaient le meme titre de metadonnees, "Codes usuels de Mauritanie
+    2026" : les retenir aurait fusionne tout le corpus en un document
+    unique, avec des pages recollees n'importe comment et des citations
+    sans valeur. Le douzieme, un recueil de droit de la sante, etait
+    intitule "Mali - Code general des impots".
+
+    Ces champs sont remplis par la chaine de publication, pas par un
+    juriste. Le nom de fichier, lui, est en general choisi pour decrire le
+    document. Les metadonnees ne servent donc que si le nom de fichier
+    n'apprend rien : `3.pdf`, `_-9.pdf`, `p1.pdf`.
     """
+    depuis_fichier = _depuis_nom_de_fichier(chemin)
+    if _nom_informatif(depuis_fichier):
+        return depuis_fichier
+
     if titre_pdf and _titre_credible(titre_pdf):
         return _nettoyer(titre_pdf)
 
+    return depuis_fichier
+
+
+def _nom_informatif(nom: str) -> bool:
+    """Le nom apprend-il quelque chose, ou n'est-ce qu'un identifiant ?"""
+    lettres = re.sub(r"[^a-zA-ZÀ-ÿ]", "", nom)
+    if len(lettres) < 4:
+        return False
+    # Un nom fait de fragments d'une ou deux lettres ("p 1", "a b") ne
+    # decrit rien, meme si le compte total de lettres passe le seuil.
+    return any(len(mot) >= 3 for mot in re.findall(r"[a-zA-ZÀ-ÿ]+", nom))
+
+
+def _depuis_nom_de_fichier(chemin: Path) -> str:
     base = chemin.stem
     # Les suffixes s'empilent : "statutpersonnelarabe-4" porte a la fois un
     # numero de version et une mention de langue. On retire jusqu'a

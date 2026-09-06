@@ -60,3 +60,6 @@ data/
 *.egg-info/
 build/
 dist/
+
+# Corpus PDF source (volumineux, non versionne)
+Documents_juridiques/

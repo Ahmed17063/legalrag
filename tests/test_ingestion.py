@@ -280,3 +280,49 @@ def test_repertoire_vide(tmp_path):
     vide = tmp_path / "rien"
     vide.mkdir()
     assert ingerer_repertoire(vide, tmp_path / "corpus") == []
+
+
+# ---------------------------------------------------------------------------
+# Le nom de fichier prime sur les metadonnees
+# ---------------------------------------------------------------------------
+
+
+def test_metadonnees_partagees_ne_fusionnent_pas_les_documents():
+    """Cas reel : onze recueils portaient le meme titre de metadonnees.
+
+    Les retenir aurait fusionne tout le corpus en un document unique, avec
+    des pages recollees n'importe comment et des citations sans valeur.
+    """
+    partage = "Codes usuels de Mauritanie 2026"
+    noms = {
+        nom_de_document(Path(f"mauritanie-recueil-{n:02d}-{sujet}.pdf"), partage)
+        for n, sujet in [(1, "droit-civil"), (3, "droit-penal"), (10, "droit-fiscal")]
+    }
+    assert len(noms) == 3
+    assert "Mauritanie recueil 03 droit penal" in noms
+
+
+def test_metadonnees_trompeuses_ignorees():
+    """Un recueil mauritanien etait intitule 'Mali - Code general des impots'."""
+    nom = nom_de_document(
+        Path("mauritanie-recueil-05-droit-sante.pdf"), "Mali - Code general des impots"
+    )
+    assert "Mali" not in nom
+    assert nom == "Mauritanie recueil 05 droit sante"
+
+
+@pytest.mark.parametrize(
+    ("fichier", "titre"),
+    [
+        ("3.pdf", "Ordonnance relative aux societes civiles"),
+        ("_-9.pdf", "Ordonnance relative aux societes civiles"),
+        ("p1.pdf", "Plan strategique national de la justice"),
+    ],
+)
+def test_metadonnees_utilisees_quand_le_nom_n_apprend_rien(fichier, titre):
+    """Les sites SPIP produisent des noms comme `_-9.pdf` : la, le titre aide."""
+    assert nom_de_document(Path(fichier), titre) == titre
+
+
+def test_sans_metadonnees_ni_nom_parlant():
+    assert nom_de_document(Path("3.pdf"), None) == "3"
