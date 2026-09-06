@@ -86,6 +86,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Afficher aussi le texte integral des extraits utilises",
     )
 
+    ingest_cmd = sub.add_parser(
+        "ingest", help="Convertir des PDF en pages .txt exploitables par le pipeline"
+    )
+    ingest_cmd.add_argument("source", type=Path, help="Un PDF, ou un repertoire de PDF")
+    ingest_cmd.add_argument(
+        "--out", type=Path, default=Path("./data/corpus"), help="Repertoire de sortie"
+    )
+    ingest_cmd.add_argument(
+        "--document", default=None, help="Titre du document (deduit du PDF sinon)"
+    )
+    ingest_cmd.add_argument(
+        "--no-lang-dirs",
+        action="store_true",
+        help="Ne pas ranger par langue dans des sous-repertoires fr/ et ar/",
+    )
+
     serve_cmd = sub.add_parser("serve", help="Lancer l'interface web du chatbot")
     serve_cmd.add_argument("--host", default="127.0.0.1", help="Adresse d'ecoute")
     serve_cmd.add_argument("--port", type=int, default=8000, help="Port d'ecoute")
@@ -151,6 +167,20 @@ def main(argv: list[str] | None = None) -> int:
             reponse = Generator(settings).answer(args.question, resultat.passages)
             _afficher_reponse(reponse, en_json=args.json, extraits=args.show_passages)
 
+        elif args.command == "ingest":
+            from .ingestion import ingerer_pdf, ingerer_repertoire
+
+            par_langue = not args.no_lang_dirs
+            if args.source.is_dir():
+                rapports = ingerer_repertoire(args.source, args.out, par_langue=par_langue)
+            else:
+                rapports = [
+                    ingerer_pdf(
+                        args.source, args.out, document=args.document, par_langue=par_langue
+                    )
+                ]
+            _afficher_ingestion(rapports, args.out)
+
         elif args.command == "serve":
             import uvicorn
 
@@ -211,6 +241,36 @@ def _afficher_recherche(resultat, en_json: bool = False) -> None:
         texte = " ".join(p.text.split())
         print(f"\n{rang}. [{p.score:.3f}] {p.citation()}")
         print(f"   {texte}")
+
+
+def _afficher_ingestion(rapports, destination) -> None:
+    """Recapitule ce que l'ingestion a produit, et ce qui bloque."""
+    par_langue: dict[str, int] = {}
+    for rapport in rapports:
+        if rapport.pages_ecrites:
+            par_langue[rapport.langue] = par_langue.get(rapport.langue, 0) + rapport.pages_ecrites
+
+    ocr = [r for r in rapports if r.ocr_necessaire]
+
+    print("----- Ingestion -----", file=sys.stderr)
+    print(f"PDF traites          : {len(rapports)}", file=sys.stderr)
+    print(f"Pages ecrites        : {sum(par_langue.values())}", file=sys.stderr)
+    for langue, nombre in sorted(par_langue.items()):
+        print(f"  {langue:14} : {nombre}", file=sys.stderr)
+    print(f"Destination          : {destination}", file=sys.stderr)
+
+    if ocr:
+        # Ces documents sont des images : sans OCR, ils resteraient des
+        # pages vides dans l'index.
+        print(f"\nPDF image, OCR necessaire ({len(ocr)}) :", file=sys.stderr)
+        for rapport in ocr:
+            print(f"  {rapport.document}", file=sys.stderr)
+
+    print(
+        "\nPour indexer : CORPUS_SOURCE=local et LOCAL_CORPUS_DIR="
+        f"{destination}/fr dans .env, puis `legalrag index`.",
+        file=sys.stderr,
+    )
 
 
 def _afficher_reponse(reponse, en_json: bool = False, extraits: bool = False) -> None:

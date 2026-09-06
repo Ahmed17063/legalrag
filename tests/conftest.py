@@ -22,6 +22,8 @@ def settings(tmp_path: Path) -> Settings:
         google_credentials_file=credentials,
         drive_folder_id="dossier",
         drive_recursive=True,
+        corpus_source="drive",
+        local_corpus_dir=tmp_path / "corpus",
         embedding_model="voyage-context-4",
         embedding_mode="contextualized",
         embedding_dimension=DIMENSION_TEST,

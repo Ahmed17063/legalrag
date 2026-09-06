@@ -94,6 +94,8 @@ class Settings:
     google_credentials_file: Path
     drive_folder_id: str
     drive_recursive: bool
+    corpus_source: str
+    local_corpus_dir: Path
     embedding_model: str
     embedding_mode: str
     embedding_dimension: int
@@ -137,13 +139,18 @@ def load_settings(env_file: Path | None = None) -> Settings:
     if not api_key:
         missing.append("VOYAGE_API_KEY")
 
-    folder_id = _env("DRIVE_FOLDER_ID")
-    if not folder_id:
-        missing.append("DRIVE_FOLDER_ID")
+    source = _env("CORPUS_SOURCE", "drive")
+    if source not in {"drive", "local"}:
+        raise ConfigError(f"CORPUS_SOURCE doit valoir 'drive' ou 'local', recu {source!r}")
 
-    creds_raw = _env("GOOGLE_APPLICATION_CREDENTIALS")
-    if not creds_raw:
-        missing.append("GOOGLE_APPLICATION_CREDENTIALS")
+    # Les credentials Google n'ont de sens que si le corpus vient de Drive.
+    folder_id = _env("DRIVE_FOLDER_ID") or ""
+    creds_raw = _env("GOOGLE_APPLICATION_CREDENTIALS") or ""
+    if source == "drive":
+        if not folder_id:
+            missing.append("DRIVE_FOLDER_ID")
+        if not creds_raw:
+            missing.append("GOOGLE_APPLICATION_CREDENTIALS")
 
     if missing:
         raise ConfigError(
@@ -206,6 +213,8 @@ def load_settings(env_file: Path | None = None) -> Settings:
         google_credentials_file=credentials_file,
         drive_folder_id=folder_id,
         drive_recursive=_env_bool("DRIVE_RECURSIVE", True),
+        corpus_source=source,
+        local_corpus_dir=Path(_env("LOCAL_CORPUS_DIR", "./data/corpus/fr")).expanduser(),
         embedding_model=model,
         embedding_mode=mode,
         embedding_dimension=dimension,

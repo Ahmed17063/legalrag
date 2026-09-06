@@ -19,6 +19,7 @@ from .boilerplate import clean_pages
 from .chunking import Chunk, PageText, chunk_pages
 from .config import Settings
 from .drive import DriveCorpus
+from .local_corpus import LocalCorpus
 from .embeddings import VoyageEmbedder
 from .filename_parser import parse_filename_or_none
 from .index_store import COMPACTED_NAME, PARTS_DIRNAME, IndexStore, make_manifest
@@ -83,11 +84,18 @@ def estimate_cost(tokens: int, model: str) -> str:
 
 def collect_pages(settings: Settings, report: RunReport, limit: int | None = None) -> list[PageText]:
     """Liste, filtre et telecharge les pages du corpus."""
-    corpus = DriveCorpus(
-        credentials_file=settings.google_credentials_file,
-        cache_dir=settings.cache_dir,
-        recursive=settings.drive_recursive,
-    )
+    if settings.corpus_source == "local":
+        corpus = LocalCorpus(
+            corpus_dir=settings.local_corpus_dir,
+            cache_dir=settings.cache_dir,
+            recursive=settings.drive_recursive,
+        )
+    else:
+        corpus = DriveCorpus(
+            credentials_file=settings.google_credentials_file,
+            cache_dir=settings.cache_dir,
+            recursive=settings.drive_recursive,
+        )
 
     files = corpus.list_text_files(settings.drive_folder_id)
     report.drive_files = len(files)

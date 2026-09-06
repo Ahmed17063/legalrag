@@ -13,6 +13,9 @@ dependencies = [
     # --- Index sur disque ----------------------------------------------------
     "pyarrow>=17.0",
 
+    # --- Ingestion de PDF ----------------------------------------------------
+    "pypdf>=6.0",
+
     # --- Google Drive (compte de service, lecture seule) ---------------------
     "google-api-python-client>=2.140",
     "google-auth>=2.34",
