@@ -1,0 +1,29 @@
+{
+  "$schema": "vscode://schemas/settings/folder",
+
+  // Interpreteur du projet. L'extension Python active automatiquement cet
+  // environnement dans chaque nouveau terminal integre : `python` y designe
+  // alors le venv, sans toucher au PATH global de la machine.
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+
+  // La console Windows est en cp1252 et ne sait pas encoder la typographie
+  // francaise (espace fine insecable, guillemets). PYTHONUTF8 evite que le
+  // probleme resurgisse ailleurs que dans la CLI, qui s'en protege deja.
+  "terminal.integrated.env.windows": {
+    "PYTHONUTF8": "1"
+  },
+  "files.encoding": "utf8",
+
+  // Tests decouvrables depuis l'interface.
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": ["tests"],
+
+  // Les fichiers generes n'ont pas a encombrer l'explorateur ni la recherche.
+  "search.exclude": {
+    "old/**": true,
+    "data/**": true,
+    ".venv/**": true
+  }
+}
