@@ -340,7 +340,19 @@ convention), le chunking (reconstitution d'un article coupé entre deux
 pages, chevauchement effectif, pages non contiguës), le découpage en lots et
 l'appariement chunk ↔ vecteur, et la reprise après incident.
 
-## 10. Ce qui n'est pas fait
+## 10. Skills Claude Code
+
+Deux skills du dépôt documentent la mise en place des accès, avec les
+commandes de diagnostic et les pièges rencontrés :
+
+| Skill | Couvre |
+|---|---|
+| [`connexion-drive`](.claude/skills/connexion-drive/SKILL.md) | Compte de service, partage du dossier, « 0 fichier trouvé », 403/404 |
+| [`connexion-voyage`](.claude/skills/connexion-voyage/SKILL.md) | Clé d'API, choix de l'endpoint selon le préfixe, plafonds de débit, 401/429 |
+
+Les invoquer avec `/connexion-drive` ou `/connexion-voyage`.
+
+## 11. Ce qui n'est pas fait
 
 - La **recherche / le retrieval** : hors périmètre de cette étape.
 - L'**évaluation de la qualité** de restitution sur ton corpus, qui reste la
