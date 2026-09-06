@@ -70,9 +70,45 @@ uv venv --python 3.11
 uv pip install -r requirements-dev.txt
 ```
 
-## 3. Où mettre la clé d'API
+## 3. Clé d'API Voyage
 
-Aucune clé n'est écrite dans le code. Tout passe par l'environnement.
+### L'obtenir
+
+Voyage AI appartient à MongoDB. Les clés se créent désormais dans MongoDB
+Atlas — **aucun cluster payant ni carte bancaire n'est requis**, et il n'est
+pas nécessaire d'être client de la base de données MongoDB.
+
+1. Créer un compte sur [cloud.mongodb.com](https://cloud.mongodb.com).
+   Atlas crée automatiquement une organisation et un projet.
+2. Dans la barre de navigation, sous **Services**, cliquer sur
+   **Model API Keys**.
+3. **Create new model API key**, lui donner un nom, sélectionner le projet.
+4. Laisser **Cloud provider** et **Geography** sur `any` : restreindre une
+   clé à une zone impose un palier payant, et oblige à viser un endpoint
+   différent.
+5. **Create**, puis **copier la clé immédiatement**. Elle n'est plus jamais
+   affichée ensuite — en cas de perte, il faut en créer une autre.
+
+Le palier gratuit couvre 200 M de tokens sur la série `voyage-4`
+(50 M sur `voyage-law-2`).
+
+### Endpoint : attention au piège
+
+Il existe deux domaines, selon l'origine de la clé :
+
+| Origine de la clé | Préfixe | Endpoint |
+|---|---|---|
+| MongoDB Atlas, non restreinte | aucun | `ai.mongodb.com` |
+| MongoDB Atlas, Europe | `al-eu-` | `eu.ai.mongodb.com` |
+| MongoDB Atlas, États-Unis | `al-us-` | `us.ai.mongodb.com` |
+| Ancien compte Voyage | `pa-` | `api.voyageai.com` |
+
+Envoyer une clé au mauvais domaine échoue à l'authentification. Le pipeline
+déduit l'endpoint du préfixe de la clé
+([`resolve_base_url`](src/legalrag/config.py)), il n'y a donc normalement
+rien à configurer. `VOYAGE_API_BASE_URL` permet de forcer une URL si besoin.
+
+### Où la mettre
 
 ```bash
 cp .env.example .env
@@ -81,35 +117,22 @@ cp .env.example .env
 Puis dans `.env` :
 
 ```
-VOYAGE_API_KEY=pa-xxxxxxxxxxxxxxxxxxxxxxxx
+VOYAGE_API_KEY=<la clé copiée>
 ```
 
 | | |
 |---|---|
-| Fichier à créer | `.env`, à la racine du dépôt |
+| Fichier | `.env`, à la racine du dépôt |
 | Variable | `VOYAGE_API_KEY` |
-| Chargement | `python-dotenv`, appelé dans [`config.py`](src/legalrag/config.py) au démarrage |
+| Chargement | `python-dotenv`, appelé dans [`config.py`](src/legalrag/config.py) |
 | Priorité | Une variable déjà définie dans l'environnement l'emporte sur `.env` — c'est ce qui permet d'injecter la clé par le CI sans toucher au fichier |
 
-La clé s'obtient sur le [dashboard Voyage](https://dashboard.voyageai.com/)
-→ *API Keys*.
+`.gitignore` couvre déjà `.env`, `secrets/`, `*service-account*.json`,
+`*credentials*.json` et `data/`. `.env.example` est versionné (il documente
+les variables attendues, sans valeurs) ; `.env` ne l'est jamais.
 
-`.gitignore` couvre déjà :
-
-```
-.env
-.env.*
-!.env.example
-secrets/
-*service-account*.json
-*credentials*.json
-data/
-```
-
-`.env.example` est versionné (il documente les variables attendues, sans
-valeurs) ; `.env` ne l'est jamais. Si une clé a été commitée par accident,
-la révoquer sur le dashboard : la retirer de l'historique git ne suffit pas,
-elle a déjà fuité.
+Si une clé a été commitée par accident, la révoquer dans Atlas : la retirer
+de l'historique git ne suffit pas, elle a déjà fuité.
 
 ## 4. Credentials Google Drive
 

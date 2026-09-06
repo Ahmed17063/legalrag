@@ -56,6 +56,7 @@ def settings(tmp_path: Path) -> Settings:
     credentials.write_text("{}", encoding="utf-8")
     return Settings(
         voyage_api_key="cle-de-test",
+        voyage_base_url="https://ai.mongodb.com/v1",
         google_credentials_file=credentials,
         drive_folder_id="dossier",
         drive_recursive=True,

@@ -24,8 +24,40 @@ KNOWN_MODELS: dict[str, tuple[str, frozenset[int], int]] = {
 }
 
 
+# Voyage AI appartient a MongoDB. Il existe deux portes d'entree, et la
+# bonne depend de l'endroit ou la cle a ete creee :
+#   - cle creee dans MongoDB Atlas  -> ai.mongodb.com (cas des comptes recents)
+#   - cle d'un ancien compte Voyage -> api.voyageai.com (prefixe "pa-")
+# Une cle limitee a une geographie doit viser l'endpoint correspondant,
+# sinon l'appel echoue.
+VOYAGE_LEGACY_URL = "https://api.voyageai.com/v1"
+VOYAGE_ATLAS_URL = "https://ai.mongodb.com/v1"
+VOYAGE_ATLAS_EU_URL = "https://eu.ai.mongodb.com/v1"
+VOYAGE_ATLAS_US_URL = "https://us.ai.mongodb.com/v1"
+
+
 class ConfigError(RuntimeError):
     """Configuration absente ou incoherente."""
+
+
+def resolve_base_url(api_key: str, override: str | None = None) -> str:
+    """Deduit l'URL de l'API a partir du prefixe de la cle.
+
+    Reproduit le routage automatique du client officiel. `override`
+    (VOYAGE_API_BASE_URL) court-circuite la deduction si besoin.
+    """
+    if override:
+        return override.rstrip("/")
+
+    if api_key.startswith("pa-"):
+        return VOYAGE_LEGACY_URL
+    if api_key.startswith("al-eu-"):
+        return VOYAGE_ATLAS_EU_URL
+    if api_key.startswith("al-us-"):
+        return VOYAGE_ATLAS_US_URL
+
+    # Cle Atlas sans restriction de geographie : pas de prefixe distinctif.
+    return VOYAGE_ATLAS_URL
 
 
 def _env(name: str, default: str | None = None) -> str | None:
@@ -58,6 +90,7 @@ class Settings:
     """Parametres du job d'indexation."""
 
     voyage_api_key: str
+    voyage_base_url: str
     google_credentials_file: Path
     drive_folder_id: str
     drive_recursive: bool
@@ -156,6 +189,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
 
     return Settings(
         voyage_api_key=api_key,
+        voyage_base_url=resolve_base_url(api_key, _env("VOYAGE_API_BASE_URL")),
         google_credentials_file=credentials_file,
         drive_folder_id=folder_id,
         drive_recursive=_env_bool("DRIVE_RECURSIVE", True),

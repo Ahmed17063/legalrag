@@ -182,6 +182,7 @@ def run(settings: Settings, limit: int | None = None, dry_run: bool = False) -> 
 
     embedder = VoyageEmbedder(
         api_key=settings.voyage_api_key,
+        base_url=settings.voyage_base_url,
         model=settings.embedding_model,
         dimension=settings.embedding_dimension,
         contextualized=settings.is_contextualized,

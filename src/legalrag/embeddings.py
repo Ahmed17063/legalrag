@@ -35,7 +35,10 @@ from .chunking import Chunk
 
 logger = logging.getLogger(__name__)
 
-API_ROOT = "https://api.voyageai.com/v1"
+# URL par defaut. Le pipeline la remplace par celle deduite de la cle
+# (voir config.resolve_base_url) : Atlas et l'ancienne plateforme Voyage
+# n'exposent pas le meme domaine.
+DEFAULT_API_ROOT = "https://api.voyageai.com/v1"
 
 # Limites documentees par Voyage pour un appel. On applique en plus une
 # marge (voir SAFETY_RATIO) car le comptage local peut differer legerement
@@ -134,7 +137,9 @@ class VoyageEmbedder:
         max_requests_per_minute: int = 200,
         max_tokens_per_minute: int = 800_000,
         timeout: float = 120.0,
+        base_url: str = DEFAULT_API_ROOT,
     ) -> None:
+        self._base_url = base_url.rstrip("/")
         self._model = model
         self._dimension = dimension
         self._contextualized = contextualized
@@ -173,7 +178,7 @@ class VoyageEmbedder:
     def _post(self, endpoint: str, payload: dict) -> dict:
         try:
             response = self._session.post(
-                f"{API_ROOT}/{endpoint}", json=payload, timeout=self._timeout
+                f"{self._base_url}/{endpoint}", json=payload, timeout=self._timeout
             )
         except requests.RequestException as exc:
             raise RetryableAPIError(f"erreur reseau : {exc}") from exc
