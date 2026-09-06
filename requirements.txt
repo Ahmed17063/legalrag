@@ -1,0 +1,13 @@
+# --- Indexation / embeddings -------------------------------------------------
+requests>=2.32,<3
+tenacity>=9.0,<10
+pyarrow>=17.0
+python-dotenv>=1.0
+
+# --- Google Drive (compte de service, lecture seule) -------------------------
+google-api-python-client>=2.140
+google-auth>=2.34
+
+# --- Tokenizer exact Voyage (optionnel mais recommande : sans lui le
+#     comptage de tokens retombe sur une heuristique plus prudente) -----------
+voyageai>=0.3.2

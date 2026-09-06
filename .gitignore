@@ -43,3 +43,14 @@ dist-ssr
 
 # Réglages Claude Code personnels
 .claude/settings.local.json
+
+# Secrets : cles d'API et credentials Google (JAMAIS commites)
+.env
+.env.*
+!.env.example
+secrets/
+*service-account*.json
+*credentials*.json
+
+# Donnees generees : cache de telechargement et index d'embeddings
+data/

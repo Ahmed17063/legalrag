@@ -1,0 +1,107 @@
+"""Point d'entree en ligne de commande.
+
+    python -m legalrag.cli index --dry-run
+    python -m legalrag.cli index
+    python -m legalrag.cli compact
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+from pathlib import Path
+
+from .config import ConfigError, load_settings
+from .index_store import IndexError_, IndexStore, make_manifest
+from .logging_setup import setup_logging
+from .pipeline import run
+
+logger = logging.getLogger(__name__)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="legalrag",
+        description="Indexation d'un corpus juridique Drive vers un index d'embeddings.",
+    )
+    parser.add_argument("--env-file", type=Path, default=None, help="Fichier .env a charger")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Logs detailles")
+
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    index_cmd = sub.add_parser("index", help="Telecharge, decoupe et plonge le corpus")
+    index_cmd.add_argument(
+        "--limit", type=int, default=None, help="Ne traiter que les N premieres pages (test)"
+    )
+    index_cmd.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Tout preparer et estimer le cout, sans appeler l'API d'embeddings",
+    )
+    index_cmd.add_argument(
+        "--compact",
+        action="store_true",
+        help="Fusionner les fragments en un fichier unique une fois le job termine",
+    )
+
+    compact_cmd = sub.add_parser("compact", help="Fusionner les fragments d'un index existant")
+    compact_cmd.add_argument(
+        "--remove-parts",
+        action="store_true",
+        help="Supprimer les fragments apres fusion",
+    )
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    setup_logging(verbose=args.verbose)
+
+    try:
+        settings = load_settings(args.env_file)
+    except ConfigError as exc:
+        logger.error("Configuration invalide.\n%s", exc)
+        return 2
+
+    try:
+        if args.command == "index":
+            report = run(settings, limit=args.limit, dry_run=args.dry_run)
+            print(report.summary(), file=sys.stderr)
+
+            if args.compact and not args.dry_run:
+                _store(settings).compact()
+
+        elif args.command == "compact":
+            _store(settings).compact(remove_parts=args.remove_parts)
+
+    except IndexError_ as exc:
+        logger.error("Index incoherent.\n%s", exc)
+        return 2
+    except KeyboardInterrupt:
+        # Les lots deja ecrits sont valides : la reprise repartira d'eux.
+        logger.warning("Interrompu. Relancez la meme commande pour reprendre ou vous en etiez.")
+        return 130
+    except Exception as exc:  # noqa: BLE001 - dernier filet avant la sortie
+        logger.exception("Echec du job : %s", exc)
+        return 1
+
+    return 0
+
+
+def _store(settings) -> IndexStore:
+    return IndexStore(
+        settings.index_dir,
+        make_manifest(
+            model=settings.embedding_model,
+            dimension=settings.embedding_dimension,
+            mode=settings.embedding_mode,
+            chunk_tokens=settings.chunk_tokens,
+            overlap=settings.chunk_overlap_tokens,
+        ),
+    )
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
