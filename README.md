@@ -207,8 +207,8 @@ python -m legalrag.cli index --dry-run
 # Sur un échantillon, pour valider la chaîne de bout en bout
 python -m legalrag.cli index --limit 20
 
-# Le job complet, puis fusion des fragments en un fichier unique
-python -m legalrag.cli index --compact
+# Le job complet : élagage des lignes obsolètes, puis fusion des fragments
+python -m legalrag.cli index --prune --compact
 
 # Fusionner plus tard un index déjà construit
 python -m legalrag.cli compact --remove-parts
@@ -268,6 +268,11 @@ Concrètement :
   identifiant et checksum : une reprise ne retélécharge pas ;
 - **le texte source change** → le `chunk_id` change → ce chunk-là est
   replongé, les autres non ;
+- **le corpus change** (texte modifié, premier passage lancé avec `--limit`)
+  → les anciens chunks restent dans l'index sans plus correspondre à rien.
+  `--prune` les supprime : il compare l'index au découpage courant et
+  retire ce qui n'a plus d'équivalent. Ignoré avec `--limit`, où tout le
+  reste de l'index paraîtrait à tort obsolète ;
 - **on change de modèle ou de dimension** → l'index refuse de s'ouvrir,
   plutôt que de mélanger des vecteurs incomparables. Utiliser un `INDEX_DIR`
   distinct.

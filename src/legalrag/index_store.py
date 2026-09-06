@@ -221,6 +221,42 @@ class IndexStore:
     def count(self) -> int:
         return sum(pq.read_metadata(part).num_rows for part in self._iter_parts())
 
+    def prune(self, valid_chunk_ids: set[str]) -> int:
+        """Supprime les lignes qui ne correspondent plus au corpus courant.
+
+        L'index est cumulatif : il conserve tout ce qui y a ete ecrit. Si
+        le texte source change, ou si un premier passage a tourne sur un
+        sous-ensemble (--limit) avec un decoupage different, les anciens
+        chunks restent en place sans plus correspondre a rien. Ils feraient
+        remonter a la recherche des fragments d'une version perimee.
+
+        Returns:
+            Le nombre de lignes supprimees.
+        """
+        removed = 0
+
+        for part in self._iter_parts():
+            table = pq.read_table(part, schema=self._schema)
+            keep = [cid in valid_chunk_ids for cid in table.column("chunk_id").to_pylist()]
+
+            if all(keep):
+                continue
+
+            removed += keep.count(False)
+            filtered = table.filter(pa.array(keep))
+
+            if filtered.num_rows == 0:
+                part.unlink()
+                continue
+
+            tmp = part.with_suffix(".parquet.part")
+            pq.write_table(filtered, tmp, compression="zstd")
+            os.replace(tmp, part)
+
+        if removed:
+            logger.info("Elagage : %d ligne(s) obsolete(s) supprimee(s)", removed)
+        return removed
+
     def compact(self, remove_parts: bool = False) -> Path | None:
         """Fusionne les fragments en un fichier unique, plus pratique a livrer."""
         parts = self._iter_parts()

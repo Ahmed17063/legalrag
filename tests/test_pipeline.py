@@ -197,3 +197,27 @@ def test_cache_drive_evite_les_retelechargements(settings, _patch):
 def test_estimation_de_cout():
     assert "USD" in pipeline.estimate_cost(1_000_000, "voyage-context-4")
     assert "inconnu" in pipeline.estimate_cost(1_000, "modele-exotique")
+
+
+def test_prune_retire_les_chunks_d_un_corpus_precedent(settings, corpus):
+    """Scenario reel : un premier passage tronque, puis le corpus complet.
+
+    Les chunks du passage tronque ont d'autres identifiants et n'ont plus
+    de correspondance : ils doivent disparaitre de l'index.
+    """
+    pipeline.run(settings, limit=1)
+    apres_echantillon = pipeline.run(settings, dry_run=True).chunks_total
+
+    rapport = pipeline.run(settings, prune=True)
+
+    assert rapport.chunks_total == apres_echantillon
+    # Plus aucune ligne etrangere au corpus courant.
+    restants = pipeline.run(settings, dry_run=True)
+    assert restants.chunks_already_indexed == restants.chunks_total
+
+
+def test_prune_ignore_sur_corpus_tronque(settings):
+    """Avec --limit, elaguer effacerait tout le reste de l'index."""
+    pipeline.run(settings)
+    rapport = pipeline.run(settings, limit=1, prune=True)
+    assert rapport.chunks_pruned == 0

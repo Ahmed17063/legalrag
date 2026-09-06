@@ -40,6 +40,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Tout preparer et estimer le cout, sans appeler l'API d'embeddings",
     )
     index_cmd.add_argument(
+        "--prune",
+        action="store_true",
+        help="Supprimer de l'index les lignes qui ne correspondent plus au corpus",
+    )
+    index_cmd.add_argument(
         "--compact",
         action="store_true",
         help="Fusionner les fragments en un fichier unique une fois le job termine",
@@ -67,7 +72,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "index":
-            report = run(settings, limit=args.limit, dry_run=args.dry_run)
+            report = run(
+                settings, limit=args.limit, dry_run=args.dry_run, prune=args.prune
+            )
             print(report.summary(), file=sys.stderr)
 
             if args.compact and not args.dry_run:

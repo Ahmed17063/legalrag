@@ -48,6 +48,7 @@ class RunReport:
     chunks_embedded: int = 0
     tokens_billed: int = 0
     parts_written: int = 0
+    chunks_pruned: int = 0
 
     def summary(self) -> str:
         lines = [
@@ -58,6 +59,7 @@ class RunReport:
             f"Chunks produits               : {self.chunks_total}",
             f"  deja indexes (non repayes)  : {self.chunks_already_indexed}",
             f"  nouvellement plonges        : {self.chunks_embedded}",
+            f"Lignes obsoletes elaguees     : {self.chunks_pruned}",
             f"Fragments Parquet ecrits      : {self.parts_written}",
             f"Tokens factures (API)         : {self.tokens_billed}",
         ]
@@ -128,7 +130,12 @@ def group_by_document(chunks: list[Chunk]) -> list[list[Chunk]]:
     return [grouped[key] for key in sorted(grouped)]
 
 
-def run(settings: Settings, limit: int | None = None, dry_run: bool = False) -> RunReport:
+def run(
+    settings: Settings,
+    limit: int | None = None,
+    dry_run: bool = False,
+    prune: bool = False,
+) -> RunReport:
     """Execute le job complet."""
     report = RunReport()
 
@@ -163,6 +170,11 @@ def run(settings: Settings, limit: int | None = None, dry_run: bool = False) -> 
             overlap=settings.chunk_overlap_tokens,
         ),
     )
+
+    if prune and limit is None:
+        # Uniquement sur un passage complet : sur un corpus tronque par
+        # --limit, tout le reste de l'index paraitrait obsolete.
+        report.chunks_pruned = store.prune({chunk.chunk_id for chunk in chunks})
 
     done = store.existing_chunk_ids()
     pending = [chunk for chunk in chunks if chunk.chunk_id not in done]

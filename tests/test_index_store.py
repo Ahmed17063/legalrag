@@ -119,3 +119,47 @@ def test_lot_vide_n_ecrit_rien(tmp_path):
     store = IndexStore(tmp_path, manifest())
     assert store.append([]) is None
     assert store.count() == 0
+
+
+def test_prune_supprime_les_lignes_obsoletes(tmp_path):
+    """Un corpus qui change laisse des lignes qui ne correspondent plus."""
+    store = IndexStore(tmp_path, manifest())
+    store.append([embedded("a", 0), embedded("b", 1)])
+    store.append([embedded("c", 2)])
+
+    supprimees = store.prune({"a", "c"})
+
+    assert supprimees == 1
+    assert store.existing_chunk_ids() == {"a", "c"}
+    assert store.count() == 2
+
+
+def test_prune_sans_rien_a_supprimer(tmp_path):
+    store = IndexStore(tmp_path, manifest())
+    store.append([embedded("a"), embedded("b")])
+
+    assert store.prune({"a", "b"}) == 0
+    assert store.existing_chunk_ids() == {"a", "b"}
+
+
+def test_prune_supprime_un_fragment_entierement_obsolete(tmp_path):
+    store = IndexStore(tmp_path, manifest())
+    store.append([embedded("a")])
+    store.append([embedded("perime")])
+
+    assert store.prune({"a"}) == 1
+    assert store.existing_chunk_ids() == {"a"}
+    assert len(list((tmp_path / "parts").glob("part-*.parquet"))) == 1
+
+
+def test_prune_preserve_les_donnees_restantes(tmp_path):
+    store = IndexStore(tmp_path, manifest())
+    store.append([embedded("a", 0), embedded("perime", 1)])
+    store.prune({"a"})
+
+    import pyarrow.parquet as pq
+
+    table = pq.read_table(tmp_path / "parts")
+    assert table.column("chunk_id").to_pylist() == ["a"]
+    assert table.column("pages").to_pylist() == [[20, 21]]
+    assert len(table.column("embedding")[0].as_py()) == DIMENSION
