@@ -140,6 +140,7 @@ class VoyageEmbedder:
         base_url: str = DEFAULT_API_ROOT,
     ) -> None:
         self._base_url = base_url.rstrip("/")
+        self._max_tokens_per_minute = max_tokens_per_minute
         self._model = model
         self._dimension = dimension
         self._contextualized = contextualized
@@ -161,7 +162,14 @@ class VoyageEmbedder:
 
     @property
     def _token_budget(self) -> int:
-        return int(MAX_TOKENS_PER_REQUEST * self._ratio)
+        """Taille maximale d'un lot, en tokens.
+
+        Bornee par la limite d'un appel, mais aussi par le debit autorise
+        par minute : un lot plus gros que le quota d'une minute serait
+        rejete a chaque tentative, et aucun reessai ne le sauverait. Cela
+        arrive sur les comptes sans moyen de paiement, plafonnes tres bas.
+        """
+        return int(min(MAX_TOKENS_PER_REQUEST, self._max_tokens_per_minute) * self._ratio)
 
     @property
     def _document_token_budget(self) -> int:
@@ -169,10 +177,13 @@ class VoyageEmbedder:
 
     # -- transport ---------------------------------------------------------
 
+    # Backoff calibre sur un compte tres plafonne : a 3 requetes par
+    # minute, repartir au bout de 2 secondes ne fait que reconsommer le
+    # quota. On attend donc d'emblee l'ordre de grandeur d'une fenetre.
     @retry(
         retry=retry_if_exception_type(RetryableAPIError),
-        stop=stop_after_attempt(6),
-        wait=wait_exponential_jitter(initial=2, max=60),
+        stop=stop_after_attempt(8),
+        wait=wait_exponential_jitter(initial=20, max=120),
         reraise=True,
     )
     def _post(self, endpoint: str, payload: dict) -> dict:
@@ -189,7 +200,14 @@ class VoyageEmbedder:
         body = response.text[:500]
 
         if response.status_code == 429:
-            raise RetryableAPIError(f"quota atteint (429) : {body}")
+            # Cas frequent : compte sans moyen de paiement, plafonne a
+            # 3 requetes et 10 000 tokens par minute. Il faut alors
+            # baisser MAX_REQUESTS_PER_MINUTE et MAX_TOKENS_PER_MINUTE
+            # pour que le limiteur cote client respecte ce plafond.
+            raise RetryableAPIError(
+                f"debit refuse (429). Budget configure : "
+                f"{self._max_tokens_per_minute} tokens/min. Reponse : {body}"
+            )
         if response.status_code >= 500:
             raise RetryableAPIError(f"erreur serveur ({response.status_code}) : {body}")
         if response.status_code in (400, 413) and _mentions_size(body):
@@ -204,8 +222,16 @@ class VoyageEmbedder:
     # -- mode contextualise ------------------------------------------------
 
     def _split_oversized(self, group: Sequence[Chunk]) -> list[list[Chunk]]:
-        """Scinde un document trop long pour tenir dans un seul contexte."""
-        budget = self._document_token_budget
+        """Scinde un document trop long pour partir d'un seul tenant.
+
+        Deux plafonds s'appliquent : le contexte du modele, et ce qu'une
+        requete peut transporter. Les chunks d'un document doivent voyager
+        dans la meme liste pour partager leur contexte, donc cette liste ne
+        peut pas depasser le budget d'une requete non plus. Sans cette
+        borne, un document unique plus gros que le budget partait entier et
+        se faisait refuser indefiniment.
+        """
+        budget = min(self._document_token_budget, self._token_budget)
         parts: list[list[Chunk]] = []
         current: list[Chunk] = []
         total = 0

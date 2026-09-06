@@ -216,3 +216,56 @@ def test_limiteur_accepte_un_lot_plus_gros_que_le_plafond():
     """Un lot unique depassant le budget ne doit pas bloquer indefiniment."""
     limiter = RateLimiter(max_requests_per_minute=10, max_tokens_per_minute=100)
     limiter.acquire(5_000)
+
+
+def test_lot_borne_par_le_debit_autorise():
+    """Un compte sans moyen de paiement est plafonne a 10 000 tokens/min.
+
+    Un lot plus gros que ce plafond serait rejete a chaque tentative :
+    aucun reessai ne peut le sauver. La taille de lot doit donc etre
+    bornee par le debit, pas seulement par la limite d'un appel.
+    """
+    embedder = make_embedder(max_tokens_per_minute=10_000)
+    assert embedder._token_budget <= 10_000
+
+    embedder_large = make_embedder(max_tokens_per_minute=800_000)
+    assert embedder_large._token_budget <= 120_000
+
+
+def test_lots_respectent_le_plafond_de_debit():
+    """Le decoupage en lots est teste directement.
+
+    Passer par `embed` ferait dormir le limiteur une minute entre chaque
+    lot : c'est le comportement voulu en production, pas dans un test.
+    """
+    embedder = make_embedder(max_tokens_per_minute=10_000)
+    groups = [[chunk(0, tokens=3000, document=f"doc{i}")] for i in range(10)]
+
+    lots = list(embedder._pack_contextual(groups))
+
+    assert len(lots) > 1, "tout serait parti en un seul lot"
+    for lot in lots:
+        cout = sum(c.token_count for groupe in lot for c in groupe)
+        assert cout <= 10_000, f"lot de {cout} tokens au-dessus du plafond par minute"
+
+
+def test_document_unique_scinde_par_le_budget_de_requete():
+    """Un seul document plus gros que le budget doit etre scinde.
+
+    Sans cette borne, un document de 18 000 tokens partait entier vers une
+    API plafonnee a 8 000 tokens/minute : refus a chaque tentative, et
+    aucun reessai ne pouvait aboutir.
+    """
+    embedder = make_embedder(max_tokens_per_minute=8_000)
+    document = [chunk(i, tokens=1000, document="code") for i in range(18)]
+
+    lots = list(embedder._pack_contextual([document]))
+
+    assert len(lots) > 1, "le document est parti d'un seul tenant"
+    for lot in lots:
+        cout = sum(c.token_count for groupe in lot for c in groupe)
+        assert cout <= 8_000, f"lot de {cout} tokens au-dessus du plafond"
+
+    # Aucun chunk perdu, aucun duplique.
+    envoyes = [c.chunk_id for lot in lots for groupe in lot for c in groupe]
+    assert sorted(envoyes) == sorted(c.chunk_id for c in document)

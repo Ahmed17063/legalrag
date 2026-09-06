@@ -177,7 +177,28 @@ interactif, donc le job tourne sans navigateur ni token à rafraîchir.
 Le scope demandé est `drive.readonly` : le pipeline ne peut rien écrire ni
 supprimer sur ton Drive, même en cas de bug.
 
-## 5. Utilisation
+## 5. Débit et plafonds
+
+Un compte Voyage **sans moyen de paiement enregistré** est plafonné à
+**3 requêtes et 10 000 tokens par minute**. C'est peu, et cela a deux
+conséquences que le pipeline gère :
+
+- la taille d'un lot est bornée par le débit autorisé, pas seulement par la
+  limite d'un appel. Un lot plus gros que le quota d'une minute serait
+  refusé à chaque tentative, et aucun réessai ne le sauverait ;
+- les chunks d'un même document, qui doivent voyager ensemble pour partager
+  leur contexte, sont eux aussi découpés selon ce budget. Sur un compte
+  plafonné, la fenêtre de contextualisation est donc plus étroite.
+
+Les valeurs par défaut (`MAX_REQUESTS_PER_MINUTE=2`,
+`MAX_TOKENS_PER_MINUTE=8000`) gardent une marge sous le plafond annoncé.
+Le corpus complet (~277 000 tokens) prend alors une trentaine de minutes.
+
+Avec un moyen de paiement enregistré — **les 200 M de tokens offerts
+continuent de s'appliquer**, la facture reste nulle — passer à `200` et
+`800000` réduit le job à quelques minutes.
+
+## 5 bis. Utilisation
 
 ```bash
 # Ce qui serait fait, et ce que ça coûterait — aucun appel facturé
