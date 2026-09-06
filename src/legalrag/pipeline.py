@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .boilerplate import clean_pages
 from .chunking import Chunk, PageText, chunk_pages
@@ -20,7 +21,14 @@ from .config import Settings
 from .drive import DriveCorpus
 from .embeddings import VoyageEmbedder
 from .filename_parser import parse_filename_or_none
-from .index_store import IndexStore, make_manifest
+from .index_store import COMPACTED_NAME, PARTS_DIRNAME, IndexStore, make_manifest
+from .qdrant_store import (
+    QdrantIndex,
+    QdrantStoreError,
+    QdrantTarget,
+    make_client,
+    read_dimension,
+)
 from .tokenization import get_tokenizer
 
 logger = logging.getLogger(__name__)
@@ -219,4 +227,97 @@ def run(
         )
 
     report.tokens_billed = embedder.total_tokens_billed
+    return report
+
+
+# ---------------------------------------------------------------------------
+# Chargement dans la base vectorielle
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class QdrantReport:
+    """Resultat d'un chargement dans Qdrant."""
+
+    cible: str = ""
+    collection_creee: bool = False
+    points_charges: int = 0
+    points_elagues: int = 0
+    points_total: int = 0
+
+    def summary(self) -> str:
+        return "\n".join(
+            [
+                "----- Chargement Qdrant -----",
+                f"Cible                         : {self.cible}",
+                f"Collection creee              : {'oui' if self.collection_creee else 'non (existante)'}",
+                f"Points charges                : {self.points_charges}",
+                f"Points obsoletes supprimes    : {self.points_elagues}",
+                f"Points dans la collection     : {self.points_total}",
+            ]
+        )
+
+
+def resolve_index_path(settings: Settings) -> Path:
+    """Le fichier compacte s'il existe, sinon les fragments.
+
+    Le compacte est prefere : un seul fichier, deja elague si `--prune` a
+    ete passe a l'indexation.
+    """
+    compacte = settings.index_dir / COMPACTED_NAME
+    if compacte.is_file():
+        return compacte
+
+    parts = settings.index_dir / PARTS_DIRNAME
+    if parts.is_dir() and any(parts.glob("part-*.parquet")):
+        return parts
+
+    raise QdrantStoreError(
+        f"Aucun index trouve dans {settings.index_dir}.\n"
+        "Lancer d'abord : python -m legalrag.cli index"
+    )
+
+
+def push_to_qdrant(
+    settings: Settings, recreate: bool = False, prune: bool = False
+) -> QdrantReport:
+    """Charge l'index Parquet dans Qdrant."""
+    report = QdrantReport()
+
+    index_path = resolve_index_path(settings)
+    dimension = read_dimension(index_path)
+    logger.info("Index source : %s (%d dimensions)", index_path, dimension)
+
+    target = QdrantTarget(
+        collection=settings.qdrant_collection,
+        url=settings.qdrant_url,
+        api_key=settings.qdrant_api_key,
+        path=settings.qdrant_path,
+    )
+    report.cible = target.describe()
+    logger.info("Cible : %s", report.cible)
+
+    client = make_client(target)
+    try:
+        index = QdrantIndex(client, settings.qdrant_collection, dimension)
+        report.collection_creee = index.ensure_collection(recreate=recreate)
+        report.points_charges = index.upsert(index_path, batch_size=settings.qdrant_batch)
+
+        if prune:
+            import pyarrow.dataset as _ds
+
+            valides = set(
+                _ds.dataset(index_path, format="parquet")
+                .to_table(columns=["chunk_id"])
+                .column("chunk_id")
+                .to_pylist()
+            )
+            report.points_elagues = index.prune(valides)
+
+        report.points_total = index.count()
+    finally:
+        # Le mode embarque verrouille le repertoire : sans fermeture, la
+        # commande suivante ne pourrait pas l'ouvrir.
+        client.close()
+
     return report

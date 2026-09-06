@@ -253,9 +253,24 @@ et le fichier compacté peut être poussé où tu veux **une fois** le job
 terminé. Écrire sur Drive obligerait par ailleurs à élargir les droits du
 compte de service au-delà de la lecture seule.
 
-Étape suivante naturelle : charger ce Parquet dans un Qdrant (déjà présent
-dans l'ancienne version du projet). Le Parquet reste la source de vérité
-rejouable, la base vectorielle devient un cache d'interrogation.
+## 6 bis. Charger dans Qdrant
+
+```bash
+python -m legalrag.cli qdrant           # charger ou mettre à jour
+python -m legalrag.cli qdrant --prune   # + supprimer les points obsolètes
+python -m legalrag.cli qdrant --recreate
+```
+
+Trois cibles, choisies par la seule variable `QDRANT_URL` : embarqué sur
+disque (défaut, aucun prérequis), serveur local, ou Qdrant Cloud. Le
+rechargement est idempotent — l'identifiant d'un point dérive du `chunk_id`,
+donc recharger met à jour au lieu de dupliquer.
+
+Le Parquet reste la source de vérité rejouable ; la base vectorielle est un
+cache d'interrogation, reconstructible sans repasser par l'API d'embeddings.
+
+> Guide détaillé, dont Qdrant Cloud :
+> **[docs/configuration-qdrant.md](docs/configuration-qdrant.md)**
 
 ## 7. Reprise sur incident
 
@@ -293,6 +308,7 @@ Concrètement :
 | [`boilerplate.py`](src/legalrag/boilerplate.py) | Détection et retrait des en-têtes/pieds de page répétés |
 | [`chunking.py`](src/legalrag/chunking.py) | Recollement des pages et découpage avec chevauchement |
 | [`embeddings.py`](src/legalrag/embeddings.py) | Appels API par lots, rate limiting, retry |
+| [`qdrant_store.py`](src/legalrag/qdrant_store.py) | Chargement de l'index dans Qdrant (embarqué, serveur ou Cloud) |
 | [`index_store.py`](src/legalrag/index_store.py) | Écriture Parquet atomique et reprise |
 | [`pipeline.py`](src/legalrag/pipeline.py) | Orchestration |
 | [`cli.py`](src/legalrag/cli.py) | Ligne de commande |

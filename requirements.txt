@@ -11,3 +11,6 @@ google-auth>=2.34
 # --- Tokenizer exact Voyage (optionnel mais recommande : sans lui le
 #     comptage de tokens retombe sur une heuristique plus prudente) -----------
 voyageai>=0.3.2
+
+# --- Base vectorielle -------------------------------------------------------
+qdrant-client>=1.12

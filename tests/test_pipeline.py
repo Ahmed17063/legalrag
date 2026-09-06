@@ -71,6 +71,11 @@ def settings(tmp_path: Path) -> Settings:
         max_tokens_per_minute=10_000_000,
         index_dir=tmp_path / "index",
         cache_dir=tmp_path / "cache",
+        qdrant_collection="test",
+        qdrant_url=None,
+        qdrant_api_key=None,
+        qdrant_path=tmp_path / "qdrant",
+        qdrant_batch=64,
     )
 
 

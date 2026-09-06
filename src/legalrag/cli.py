@@ -14,8 +14,9 @@ from pathlib import Path
 
 from .config import ConfigError, load_settings
 from .index_store import IndexError_, IndexStore, make_manifest
+from .qdrant_store import QdrantStoreError
 from .logging_setup import setup_logging
-from .pipeline import run
+from .pipeline import push_to_qdrant, run
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Fusionner les fragments en un fichier unique une fois le job termine",
     )
 
+    qdrant_cmd = sub.add_parser("qdrant", help="Charger l'index dans Qdrant")
+    qdrant_cmd.add_argument(
+        "--recreate",
+        action="store_true",
+        help="Supprimer et recreer la collection avant de charger",
+    )
+    qdrant_cmd.add_argument(
+        "--prune",
+        action="store_true",
+        help="Supprimer de la collection les points absents de l'index",
+    )
+
     compact_cmd = sub.add_parser("compact", help="Fusionner les fragments d'un index existant")
     compact_cmd.add_argument(
         "--remove-parts",
@@ -80,9 +93,16 @@ def main(argv: list[str] | None = None) -> int:
             if args.compact and not args.dry_run:
                 _store(settings).compact()
 
+        elif args.command == "qdrant":
+            rapport = push_to_qdrant(settings, recreate=args.recreate, prune=args.prune)
+            print(rapport.summary(), file=sys.stderr)
+
         elif args.command == "compact":
             _store(settings).compact(remove_parts=args.remove_parts)
 
+    except QdrantStoreError as exc:
+        logger.error("Chargement Qdrant impossible.\n%s", exc)
+        return 2
     except IndexError_ as exc:
         logger.error("Index incoherent.\n%s", exc)
         return 2

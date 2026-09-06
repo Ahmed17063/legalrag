@@ -105,6 +105,11 @@ class Settings:
     max_tokens_per_minute: int
     index_dir: Path
     cache_dir: Path
+    qdrant_collection: str
+    qdrant_url: str | None
+    qdrant_api_key: str | None
+    qdrant_path: Path
+    qdrant_batch: int
 
     @property
     def is_contextualized(self) -> bool:
@@ -205,6 +210,11 @@ def load_settings(env_file: Path | None = None) -> Settings:
         max_tokens_per_minute=_env_int("MAX_TOKENS_PER_MINUTE", 800_000),
         index_dir=Path(_env("INDEX_DIR", "./data/index")).expanduser(),
         cache_dir=Path(_env("CACHE_DIR", "./data/cache")).expanduser(),
+        qdrant_collection=_env("QDRANT_COLLECTION", "legalrag"),
+        qdrant_url=_env("QDRANT_URL"),
+        qdrant_api_key=_env("QDRANT_API_KEY"),
+        qdrant_path=Path(_env("QDRANT_PATH", "./data/qdrant")).expanduser(),
+        qdrant_batch=_env_int("QDRANT_BATCH", 128),
     )
 
 
