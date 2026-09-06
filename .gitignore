@@ -54,3 +54,8 @@ secrets/
 
 # Donnees generees : cache de telechargement et index d'embeddings
 data/
+
+# Artefacts de build (pip install -e .)
+*.egg-info/
+build/
+dist/
