@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 from pathlib import Path
@@ -63,6 +64,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Supprimer de la collection les points absents de l'index",
     )
 
+    search_cmd = sub.add_parser("search", help="Chercher des passages repondant a une question")
+    search_cmd.add_argument("question", help="La question, entre guillemets")
+    search_cmd.add_argument("--top-k", type=int, default=None, help="Chunks ramenes par le vectoriel")
+    search_cmd.add_argument("--top-n", type=int, default=None, help="Passages renvoyes")
+    search_cmd.add_argument("--document", default=None, help="Restreindre a un document_id")
+    search_cmd.add_argument("--no-rerank", action="store_true", help="Sauter le reranking")
+    search_cmd.add_argument("--json", action="store_true", help="Sortie JSON")
+
     compact_cmd = sub.add_parser("compact", help="Fusionner les fragments d'un index existant")
     compact_cmd.add_argument(
         "--remove-parts",
@@ -93,6 +102,19 @@ def main(argv: list[str] | None = None) -> int:
             if args.compact and not args.dry_run:
                 _store(settings).compact()
 
+        elif args.command == "search":
+            from .retrieval import Retriever
+
+            with Retriever(settings) as retriever:
+                resultat = retriever.search(
+                    args.question,
+                    top_k=args.top_k,
+                    top_n=args.top_n,
+                    document_id=args.document,
+                    rerank=not args.no_rerank,
+                )
+            _afficher_recherche(resultat, en_json=args.json)
+
         elif args.command == "qdrant":
             rapport = push_to_qdrant(settings, recreate=args.recreate, prune=args.prune)
             print(rapport.summary(), file=sys.stderr)
@@ -115,6 +137,26 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     return 0
+
+
+def _afficher_recherche(resultat, en_json: bool = False) -> None:
+    """Rend le resultat lisible en terminal, ou exploitable en JSON."""
+    if en_json:
+        print(json.dumps(resultat.as_dict(), ensure_ascii=False, indent=2))
+        return
+
+    entete = (
+        f"{len(resultat.passages)} passage(s) | "
+        f"{resultat.chunks_examined} chunks -> {resultat.passages_examined} passages | "
+        f"{'reclasses' if resultat.reranked else 'ordre vectoriel'} | "
+        f"{resultat.tokens_billed} tokens"
+    )
+    print(f"\n{resultat.query}\n{entete}\n" + "-" * 78)
+
+    for rang, p in enumerate(resultat.passages, 1):
+        texte = " ".join(p.text.split())
+        print(f"\n{rang}. [{p.score:.3f}] {p.citation()}")
+        print(f"   {texte}")
 
 
 def _store(settings) -> IndexStore:

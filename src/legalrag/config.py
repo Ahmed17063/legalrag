@@ -110,6 +110,10 @@ class Settings:
     qdrant_api_key: str | None
     qdrant_path: Path
     qdrant_batch: int
+    rerank_model: str
+    rerank_enabled: bool
+    retrieval_top_k: int
+    retrieval_top_n: int
 
     @property
     def is_contextualized(self) -> bool:
@@ -215,6 +219,10 @@ def load_settings(env_file: Path | None = None) -> Settings:
         qdrant_api_key=_env("QDRANT_API_KEY"),
         qdrant_path=Path(_env("QDRANT_PATH", "./data/qdrant")).expanduser(),
         qdrant_batch=_env_int("QDRANT_BATCH", 128),
+        rerank_model=_env("RERANK_MODEL", "rerank-3"),
+        rerank_enabled=_env_bool("RERANK_ENABLED", True),
+        retrieval_top_k=_env_int("RETRIEVAL_TOP_K", 25),
+        retrieval_top_n=_env_int("RETRIEVAL_TOP_N", 5),
     )
 
 

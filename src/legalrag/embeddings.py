@@ -17,28 +17,36 @@ apres incident possible sans repayer les lots deja ecrits.
 from __future__ import annotations
 
 import logging
-import threading
-import time
-from collections import deque
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
-import requests
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential_jitter,
-)
-
 from .chunking import Chunk
+from .voyage_http import (
+    DEFAULT_API_ROOT,
+    PayloadTooLargeError,
+    RateLimiter,
+    RetryableAPIError,
+    VoyageError,
+    VoyageTransport,
+)
 
 logger = logging.getLogger(__name__)
 
-# URL par defaut. Le pipeline la remplace par celle deduite de la cle
-# (voir config.resolve_base_url) : Atlas et l'ancienne plateforme Voyage
-# n'exposent pas le meme domaine.
-DEFAULT_API_ROOT = "https://api.voyageai.com/v1"
+# Reexportes : le reste du projet et les tests importent ces noms depuis ici.
+EmbeddingError = VoyageError
+
+__all__ = [
+    "EmbeddedChunk",
+    "EmbeddingError",
+    "PayloadTooLargeError",
+    "RateLimiter",
+    "RetryableAPIError",
+    "VoyageEmbedder",
+    "MAX_INPUTS_PER_REQUEST",
+    "MAX_CHUNKS_PER_REQUEST",
+    "MAX_TOKENS_PER_REQUEST",
+    "MAX_TOKENS_PER_DOCUMENT",
+]
 
 # Limites documentees par Voyage pour un appel. On applique en plus une
 # marge (voir SAFETY_RATIO) car le comptage local peut differer legerement
@@ -55,73 +63,12 @@ SAFETY_RATIO_EXACT = 0.95
 SAFETY_RATIO_APPROX = 0.75
 
 
-class EmbeddingError(RuntimeError):
-    """Echec d'appel a l'API d'embeddings."""
-
-
-class RetryableAPIError(EmbeddingError):
-    """Erreur transitoire : quota momentane, panne serveur, reseau."""
-
-
-class PayloadTooLargeError(EmbeddingError):
-    """Le lot a ete refuse pour cause de taille : il faut le scinder."""
-
-
 @dataclass(frozen=True, slots=True)
 class EmbeddedChunk:
     """Un chunk et son vecteur."""
 
     chunk: Chunk
     embedding: list[float]
-
-
-class RateLimiter:
-    """Limiteur a fenetre glissante sur les requetes et les tokens.
-
-    Sert de garde-fou cote client : il vaut mieux lisser le debit que
-    declencher des 429 en rafale et passer son temps en backoff.
-    """
-
-    def __init__(self, max_requests_per_minute: int, max_tokens_per_minute: int) -> None:
-        self._max_requests = max_requests_per_minute
-        self._max_tokens = max_tokens_per_minute
-        self._requests: deque[float] = deque()
-        self._tokens: deque[tuple[float, int]] = deque()
-        self._lock = threading.Lock()
-
-    def _prune(self, now: float) -> None:
-        horizon = now - 60.0
-        while self._requests and self._requests[0] < horizon:
-            self._requests.popleft()
-        while self._tokens and self._tokens[0][0] < horizon:
-            self._tokens.popleft()
-
-    def acquire(self, tokens: int) -> None:
-        """Bloque jusqu'a ce que le budget de la minute glissante le permette."""
-        while True:
-            with self._lock:
-                now = time.monotonic()
-                self._prune(now)
-
-                used_tokens = sum(count for _, count in self._tokens)
-                requests_ok = len(self._requests) < self._max_requests
-                tokens_ok = used_tokens + tokens <= self._max_tokens or not self._tokens
-
-                if requests_ok and tokens_ok:
-                    self._requests.append(now)
-                    self._tokens.append((now, tokens))
-                    return
-
-                oldest = min(
-                    [self._requests[0]] if self._requests else [],
-                    default=now,
-                )
-                if self._tokens:
-                    oldest = min(oldest, self._tokens[0][0])
-                wait = max(0.05, 60.0 - (now - oldest))
-
-            logger.debug("Debit plafonne, attente de %.1fs", wait)
-            time.sleep(wait)
 
 
 class VoyageEmbedder:
@@ -139,22 +86,20 @@ class VoyageEmbedder:
         timeout: float = 120.0,
         base_url: str = DEFAULT_API_ROOT,
     ) -> None:
-        self._base_url = base_url.rstrip("/")
+        self._transport = VoyageTransport(
+            api_key=api_key,
+            base_url=base_url,
+            max_requests_per_minute=max_requests_per_minute,
+            max_tokens_per_minute=max_tokens_per_minute,
+            timeout=timeout,
+        )
         self._max_tokens_per_minute = max_tokens_per_minute
         self._model = model
         self._dimension = dimension
         self._contextualized = contextualized
         self._timeout = timeout
         self._ratio = SAFETY_RATIO_EXACT if exact_tokenizer else SAFETY_RATIO_APPROX
-        self._limiter = RateLimiter(max_requests_per_minute, max_tokens_per_minute)
-
-        self._session = requests.Session()
-        self._session.headers.update(
-            {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            }
-        )
+        self._limiter = self._transport.limiter
 
         self.total_tokens_billed = 0
 
@@ -177,47 +122,12 @@ class VoyageEmbedder:
 
     # -- transport ---------------------------------------------------------
 
-    # Backoff calibre sur un compte tres plafonne : a 3 requetes par
-    # minute, repartir au bout de 2 secondes ne fait que reconsommer le
-    # quota. On attend donc d'emblee l'ordre de grandeur d'une fenetre.
-    @retry(
-        retry=retry_if_exception_type(RetryableAPIError),
-        stop=stop_after_attempt(8),
-        wait=wait_exponential_jitter(initial=20, max=120),
-        reraise=True,
-    )
     def _post(self, endpoint: str, payload: dict) -> dict:
-        try:
-            response = self._session.post(
-                f"{self._base_url}/{endpoint}", json=payload, timeout=self._timeout
-            )
-        except requests.RequestException as exc:
-            raise RetryableAPIError(f"erreur reseau : {exc}") from exc
+        """Delegue au transport partage.
 
-        if response.status_code == 200:
-            return response.json()
-
-        body = response.text[:500]
-
-        if response.status_code == 429:
-            # Cas frequent : compte sans moyen de paiement, plafonne a
-            # 3 requetes et 10 000 tokens par minute. Il faut alors
-            # baisser MAX_REQUESTS_PER_MINUTE et MAX_TOKENS_PER_MINUTE
-            # pour que le limiteur cote client respecte ce plafond.
-            raise RetryableAPIError(
-                f"debit refuse (429). Budget configure : "
-                f"{self._max_tokens_per_minute} tokens/min. Reponse : {body}"
-            )
-        if response.status_code >= 500:
-            raise RetryableAPIError(f"erreur serveur ({response.status_code}) : {body}")
-        if response.status_code in (400, 413) and _mentions_size(body):
-            raise PayloadTooLargeError(body)
-        if response.status_code in (401, 403):
-            raise EmbeddingError(
-                f"authentification refusee ({response.status_code}). "
-                "Verifiez VOYAGE_API_KEY. Detail : " + body
-            )
-        raise EmbeddingError(f"appel refuse ({response.status_code}) : {body}")
+        Reste une methode : les tests la remplacent pour eviter le reseau.
+        """
+        return self._transport.post(endpoint, payload)
 
     # -- mode contextualise ------------------------------------------------
 
@@ -370,11 +280,6 @@ class VoyageEmbedder:
 
 
 # -- utilitaires de decodage des reponses ----------------------------------
-
-
-def _mentions_size(body: str) -> bool:
-    lowered = body.lower()
-    return any(word in lowered for word in ("token", "too large", "limit", "exceed"))
 
 
 def _pair_standard(batch: Sequence[Chunk], data: dict) -> list[EmbeddedChunk]:

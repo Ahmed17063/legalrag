@@ -76,6 +76,10 @@ def settings(tmp_path: Path) -> Settings:
         qdrant_api_key=None,
         qdrant_path=tmp_path / "qdrant",
         qdrant_batch=64,
+        rerank_model="rerank-3",
+        rerank_enabled=True,
+        retrieval_top_k=25,
+        retrieval_top_n=5,
     )
 
 
