@@ -1,15 +1,50 @@
+[project]
+name = "legalrag"
+version = "0.1.0"
+description = "RAG sur un corpus juridique francais : Drive, embeddings, Qdrant, reponses sourcees"
+requires-python = ">=3.11"
+
+dependencies = [
+    # --- Socle : HTTP, reessais, configuration -------------------------------
+    "requests>=2.32,<3",
+    "tenacity>=9.0,<10",
+    "python-dotenv>=1.0",
+
+    # --- Index sur disque ----------------------------------------------------
+    "pyarrow>=17.0",
+
+    # --- Google Drive (compte de service, lecture seule) ---------------------
+    "google-api-python-client>=2.140",
+    "google-auth>=2.34",
+
+    # --- Tokenizer exact Voyage. Sans lui, le comptage de tokens retombe sur
+    #     une heuristique plus prudente : le job tourne, avec plus de marge.
+    "voyageai>=0.3.2",
+
+    # --- Base vectorielle ----------------------------------------------------
+    "qdrant-client>=1.12",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+]
+
+[project.scripts]
+# Rend la commande disponible directement : `uv run legalrag ask "..."`
+legalrag = "legalrag.cli:main"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
-[project]
-name = "legalrag"
-version = "0.1.0"
-description = "Indexation et embeddings d'un corpus juridique francais stocke sur Google Drive"
-requires-python = ">=3.11"
-
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.uv]
+# Le paquet lui-meme est installe en mode editable par `uv sync` : les
+# modifications de src/ sont prises en compte sans reinstallation.
+package = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

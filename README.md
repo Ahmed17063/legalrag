@@ -65,10 +65,53 @@ l'index refuse de mélanger deux modèles.
 
 ## 2. Installation
 
+Les dépendances sont gérées par [uv](https://docs.astral.sh/uv/).
+`pyproject.toml` les déclare, `uv.lock` les verrouille — les deux sont
+versionnés, donc l'installation est reproductible à l'identique.
+
 ```bash
-uv venv --python 3.11
-uv pip install -r requirements-dev.txt
+uv sync --all-groups
 ```
+
+C'est tout : uv crée le `.venv`, installe les dépendances **et** le projet
+lui-même en mode éditable. Aucune activation n'est nécessaire avec `uv run` :
+
+```bash
+uv run legalrag ask "ta question"
+uv run pytest
+```
+
+| Commande | Effet |
+|---|---|
+| `uv sync` | Dépendances de production seulement |
+| `uv sync --all-groups` | Y compris `dev` (pytest) |
+| `uv add <paquet>` | Ajoute une dépendance et met `uv.lock` à jour |
+| `uv add --group dev <paquet>` | Idem, dans le groupe de développement |
+| `uv lock --upgrade` | Remonte les versions dans les bornes déclarées |
+| `uv run <commande>` | Exécute dans l'environnement, sans l'activer |
+
+`requirements.txt` n'existe plus : `pyproject.toml` est la source unique. Si
+un contexte l'exige malgré tout (image Docker minimale, CI qui ne connaît pas
+uv) :
+
+```bash
+uv export --no-dev --format requirements-txt > requirements.txt
+```
+
+Ne pas versionner ce fichier généré — il divergerait du lock.
+
+### Dans VS Code
+
+[.vscode/settings.json](.vscode/settings.json) pointe l'interpréteur sur le
+`.venv` du projet. L'extension Python active l'environnement dans chaque
+nouveau terminal intégré, ce qui permet d'écrire directement :
+
+```powershell
+uv run legalrag ask "ta question"
+```
+
+Le réglage est limité au dossier : le PATH global de la machine n'est pas
+modifié, les autres projets ne sont pas affectés.
 
 ## 3. Clé d'API Voyage
 
@@ -208,16 +251,16 @@ continuent de s'appliquer**, la facture reste nulle — passer à `200` et
 
 ```bash
 # Ce qui serait fait, et ce que ça coûterait — aucun appel facturé
-python -m legalrag.cli index --dry-run
+uv run legalrag index --dry-run
 
 # Sur un échantillon, pour valider la chaîne de bout en bout
-python -m legalrag.cli index --limit 20
+uv run legalrag index --limit 20
 
 # Le job complet : élagage des lignes obsolètes, puis fusion des fragments
-python -m legalrag.cli index --prune --compact
+uv run legalrag index --prune --compact
 
 # Fusionner plus tard un index déjà construit
-python -m legalrag.cli compact --remove-parts
+uv run legalrag compact --remove-parts
 ```
 
 `-v` pour les logs détaillés.
@@ -256,9 +299,9 @@ compte de service au-delà de la lecture seule.
 ## 6 bis. Charger dans Qdrant
 
 ```bash
-python -m legalrag.cli qdrant           # charger ou mettre à jour
-python -m legalrag.cli qdrant --prune   # + supprimer les points obsolètes
-python -m legalrag.cli qdrant --recreate
+uv run legalrag qdrant           # charger ou mettre à jour
+uv run legalrag qdrant --prune   # + supprimer les points obsolètes
+uv run legalrag qdrant --recreate
 ```
 
 Trois cibles, choisies par la seule variable `QDRANT_URL` : embarqué sur
@@ -355,7 +398,7 @@ Mesuré sur le corpus mauritanien : **7,8 % des caractères** retirés,
 ## 9. Tests
 
 ```bash
-python -m pytest
+uv run pytest
 ```
 
 67 tests, sans appel réseau. Couvrent le parsing des noms (avec et sans
@@ -368,11 +411,11 @@ l'appariement chunk ↔ vecteur, et la reprise après incident.
 
 ```bash
 # Les passages sourcés, sans rédaction
-python -m legalrag.cli search "ta question" --top-k 8 --top-n 3
+uv run legalrag search "ta question" --top-k 8 --top-n 3
 
 # Une réponse rédigée, avec ses sources
-python -m legalrag.cli ask "ta question" --top-k 8 --top-n 3
-python -m legalrag.cli ask "..." --show-passages   # + le texte intégral cité
+uv run legalrag ask "ta question" --top-k 8 --top-n 3
+uv run legalrag ask "..." --show-passages   # + le texte intégral cité
 ```
 
 La recherche procède en trois temps : vectoriel dans Qdrant, découpage de
