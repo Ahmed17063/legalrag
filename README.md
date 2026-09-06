@@ -136,6 +136,9 @@ de l'historique git ne suffit pas, elle a déjà fuité.
 
 ## 4. Credentials Google Drive
 
+> Guide détaillé, écran par écran :
+> **[docs/configuration-google-drive.md](docs/configuration-google-drive.md)**
+
 Le pipeline lit Drive avec un **compte de service** — pas d'OAuth
 interactif, donc le job tourne sans navigateur ni token à rafraîchir.
 
