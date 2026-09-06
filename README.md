@@ -258,6 +258,7 @@ Concrètement :
 | [`filename_parser.py`](src/legalrag/filename_parser.py) | Nom de fichier → document / page / horodatage |
 | [`drive.py`](src/legalrag/drive.py) | Listing et téléchargement Drive, cache, retry |
 | [`tokenization.py`](src/legalrag/tokenization.py) | Comptage de tokens et positions caractères |
+| [`boilerplate.py`](src/legalrag/boilerplate.py) | Détection et retrait des en-têtes/pieds de page répétés |
 | [`chunking.py`](src/legalrag/chunking.py) | Recollement des pages et découpage avec chevauchement |
 | [`embeddings.py`](src/legalrag/embeddings.py) | Appels API par lots, rate limiting, retry |
 | [`index_store.py`](src/legalrag/index_store.py) | Écriture Parquet atomique et reprise |
@@ -280,6 +281,26 @@ Deux détails qui comptent :
 - une page manquante coupe la continuité. Si le corpus contient les pages 20
   et 22 mais pas la 21, elles ne sont pas recollées : cela fabriquerait un
   faux voisinage.
+
+### Les bandeaux de page
+
+Les corpus numérisés portent un en-tête et un pied de page sur chaque page
+(institution, titre du document). Ils sont retirés **avant** le chunking,
+sinon le bandeau s'insère au milieu des articles à cheval sur deux pages —
+précisément la coupure que le recollement doit supprimer.
+
+La détection est statistique, pas codée en dur : une ligne est un bandeau si
+elle apparaît en tête ou en pied de plus de la moitié des pages du même
+document. Le bruit d'OCR (le même bandeau ressort en « ...Justice : LS »,
+« ...Justice D », « ...Justice T ») est absorbé en ignorant les jetons courts
+de fin de ligne. Les numéros, eux, sont conservés : sans cela « Article 12 »
+et « Article 13 » se confondraient et du contenu serait supprimé.
+
+Garde-fous : une ligne ouvrant un article, un titre, un chapitre ou une
+section n'est jamais retirée, et un retrait qui viderait une page est annulé.
+
+Mesuré sur le corpus mauritanien : **7,8 % des caractères** retirés,
+378 → 348 chunks. `STRIP_BOILERPLATE=false` désactive le mécanisme.
 
 ## 9. Tests
 

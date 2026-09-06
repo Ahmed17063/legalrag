@@ -66,6 +66,7 @@ def settings(tmp_path: Path) -> Settings:
         model_max_tokens=32_000,
         chunk_tokens=60,
         chunk_overlap_tokens=20,
+        strip_boilerplate=True,
         max_requests_per_minute=1000,
         max_tokens_per_minute=10_000_000,
         index_dir=tmp_path / "index",

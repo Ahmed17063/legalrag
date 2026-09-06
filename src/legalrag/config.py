@@ -100,6 +100,7 @@ class Settings:
     model_max_tokens: int
     chunk_tokens: int
     chunk_overlap_tokens: int
+    strip_boilerplate: bool
     max_requests_per_minute: int
     max_tokens_per_minute: int
     index_dir: Path
@@ -199,6 +200,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         model_max_tokens=max_tokens,
         chunk_tokens=chunk_tokens,
         chunk_overlap_tokens=overlap,
+        strip_boilerplate=_env_bool("STRIP_BOILERPLATE", True),
         max_requests_per_minute=_env_int("MAX_REQUESTS_PER_MINUTE", 200),
         max_tokens_per_minute=_env_int("MAX_TOKENS_PER_MINUTE", 800_000),
         index_dir=Path(_env("INDEX_DIR", "./data/index")).expanduser(),

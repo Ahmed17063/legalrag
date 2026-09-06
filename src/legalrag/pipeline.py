@@ -14,6 +14,7 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from .boilerplate import clean_pages
 from .chunking import Chunk, PageText, chunk_pages
 from .config import Settings
 from .drive import DriveCorpus
@@ -136,6 +137,11 @@ def run(settings: Settings, limit: int | None = None, dry_run: bool = False) -> 
     if not pages:
         logger.warning("Aucune page exploitable : rien a faire.")
         return report
+
+    if settings.strip_boilerplate:
+        # Avant le chunking : sinon le bandeau se retrouve injecte au
+        # milieu des articles a cheval sur deux pages.
+        pages = clean_pages(pages)
 
     chunks = chunk_pages(
         pages,
