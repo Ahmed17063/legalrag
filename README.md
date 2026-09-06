@@ -72,6 +72,9 @@ uv pip install -r requirements-dev.txt
 
 ## 3. Clé d'API Voyage
 
+> Guide détaillé, écran par écran :
+> **[docs/configuration-voyage.md](docs/configuration-voyage.md)**
+
 ### L'obtenir
 
 Voyage AI appartient à MongoDB. Les clés se créent désormais dans MongoDB
