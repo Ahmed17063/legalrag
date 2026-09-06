@@ -114,6 +114,9 @@ class Settings:
     rerank_enabled: bool
     retrieval_top_k: int
     retrieval_top_n: int
+    groq_api_key: str | None
+    generation_model: str
+    generation_max_tokens: int
 
     @property
     def is_contextualized(self) -> bool:
@@ -223,6 +226,9 @@ def load_settings(env_file: Path | None = None) -> Settings:
         rerank_enabled=_env_bool("RERANK_ENABLED", True),
         retrieval_top_k=_env_int("RETRIEVAL_TOP_K", 25),
         retrieval_top_n=_env_int("RETRIEVAL_TOP_N", 5),
+        groq_api_key=_env("GROQ_API_KEY"),
+        generation_model=_env("GENERATION_MODEL", "openai/gpt-oss-120b"),
+        generation_max_tokens=_env_int("GENERATION_MAX_TOKENS", 1024),
     )
 
 

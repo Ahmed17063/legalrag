@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .config import ConfigError, load_settings
 from .index_store import IndexError_, IndexStore, make_manifest
+from .generation import GenerationError
 from .qdrant_store import QdrantStoreError
 from .logging_setup import setup_logging
 from .pipeline import push_to_qdrant, run
@@ -72,6 +73,19 @@ def build_parser() -> argparse.ArgumentParser:
     search_cmd.add_argument("--no-rerank", action="store_true", help="Sauter le reranking")
     search_cmd.add_argument("--json", action="store_true", help="Sortie JSON")
 
+    ask_cmd = sub.add_parser("ask", help="Poser une question et obtenir une reponse redigee")
+    ask_cmd.add_argument("question", help="La question, entre guillemets")
+    ask_cmd.add_argument("--top-k", type=int, default=None, help="Chunks ramenes par le vectoriel")
+    ask_cmd.add_argument("--top-n", type=int, default=None, help="Passages soumis au modele")
+    ask_cmd.add_argument("--document", default=None, help="Restreindre a un document_id")
+    ask_cmd.add_argument("--no-rerank", action="store_true", help="Sauter le reranking")
+    ask_cmd.add_argument("--json", action="store_true", help="Sortie JSON")
+    ask_cmd.add_argument(
+        "--show-passages",
+        action="store_true",
+        help="Afficher aussi le texte integral des extraits utilises",
+    )
+
     compact_cmd = sub.add_parser("compact", help="Fusionner les fragments d'un index existant")
     compact_cmd.add_argument(
         "--remove-parts",
@@ -115,6 +129,21 @@ def main(argv: list[str] | None = None) -> int:
                 )
             _afficher_recherche(resultat, en_json=args.json)
 
+        elif args.command == "ask":
+            from .generation import Generator
+            from .retrieval import Retriever
+
+            with Retriever(settings) as retriever:
+                resultat = retriever.search(
+                    args.question,
+                    top_k=args.top_k,
+                    top_n=args.top_n,
+                    document_id=args.document,
+                    rerank=not args.no_rerank,
+                )
+            reponse = Generator(settings).answer(args.question, resultat.passages)
+            _afficher_reponse(reponse, en_json=args.json, extraits=args.show_passages)
+
         elif args.command == "qdrant":
             rapport = push_to_qdrant(settings, recreate=args.recreate, prune=args.prune)
             print(rapport.summary(), file=sys.stderr)
@@ -122,6 +151,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "compact":
             _store(settings).compact(remove_parts=args.remove_parts)
 
+    except GenerationError as exc:
+        logger.error("Generation impossible.\n%s", exc)
+        return 2
     except QdrantStoreError as exc:
         logger.error("Chargement Qdrant impossible.\n%s", exc)
         return 2
@@ -157,6 +189,42 @@ def _afficher_recherche(resultat, en_json: bool = False) -> None:
         texte = " ".join(p.text.split())
         print(f"\n{rang}. [{p.score:.3f}] {p.citation()}")
         print(f"   {texte}")
+
+
+def _afficher_reponse(reponse, en_json: bool = False, extraits: bool = False) -> None:
+    """Affiche la reponse, ses sources, et les reserves eventuelles."""
+    if en_json:
+        print(json.dumps(reponse.as_dict(), ensure_ascii=False, indent=2))
+        return
+
+    print(f"\n{reponse.question}\n" + "=" * 78)
+    print(f"\n{reponse.text}\n")
+
+    if reponse.sources():
+        print("Sources :")
+        for source in reponse.sources():
+            print(f"  {source}")
+
+    # Les reserves comptent autant que la reponse : sur du juridique, une
+    # affirmation non rattachee a un texte ne vaut rien.
+    if reponse.invalid_citations:
+        print(
+            f"\n/!\\ Le modele cite des extraits inexistants {list(reponse.invalid_citations)} "
+            f"alors que {len(reponse.passages)} lui ont ete fournis. Reponse a verifier."
+        )
+    elif not reponse.cited and not reponse.declined:
+        print("\n/!\\ Aucune citation : rien ne rattache cette reponse aux extraits.")
+
+    if extraits:
+        print("\n" + "-" * 78)
+        for i, passage in enumerate(reponse.passages, 1):
+            print(f"\n[{i}] {passage.citation()}")
+            print("    " + " ".join(passage.text.split()))
+
+    print(
+        f"\n({reponse.model} | {reponse.prompt_tokens} tokens en entree, "
+        f"{reponse.completion_tokens} en sortie)"
+    )
 
 
 def _store(settings) -> IndexStore:

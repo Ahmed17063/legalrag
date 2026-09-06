@@ -311,6 +311,8 @@ Concrètement :
 | [`qdrant_store.py`](src/legalrag/qdrant_store.py) | Chargement de l'index dans Qdrant (embarqué, serveur ou Cloud) |
 | [`index_store.py`](src/legalrag/index_store.py) | Écriture Parquet atomique et reprise |
 | [`pipeline.py`](src/legalrag/pipeline.py) | Orchestration |
+| [`retrieval.py`](src/legalrag/retrieval.py) | Recherche : vectoriel, découpage par article, reranking |
+| [`generation.py`](src/legalrag/generation.py) | Rédaction de la réponse (Groq), avec vérification des citations |
 | [`cli.py`](src/legalrag/cli.py) | Ligne de commande |
 | [`config.py`](src/legalrag/config.py) | Configuration par variables d'environnement |
 
@@ -361,6 +363,39 @@ horodatage, titres à tirets, pages à plusieurs chiffres, fichiers hors
 convention), le chunking (reconstitution d'un article coupé entre deux
 pages, chevauchement effectif, pages non contiguës), le découpage en lots et
 l'appariement chunk ↔ vecteur, et la reprise après incident.
+
+## 9 bis. Poser une question
+
+```bash
+# Les passages sourcés, sans rédaction
+python -m legalrag.cli search "ta question" --top-k 8 --top-n 3
+
+# Une réponse rédigée, avec ses sources
+python -m legalrag.cli ask "ta question" --top-k 8 --top-n 3
+python -m legalrag.cli ask "..." --show-passages   # + le texte intégral cité
+```
+
+La recherche procède en trois temps : vectoriel dans Qdrant, découpage de
+chaque chunk sur ses en-têtes d'article, puis reranking des passages face à
+la question. Sans ce découpage, un chunk de 2554 caractères contenant
+6,3 articles en moyenne noierait l'article pertinent.
+
+### Les garde-fous de la génération
+
+Sur du juridique, un modèle qui reformule approximativement une disposition
+produit une réponse plausible et fausse — pire qu'inutile. Trois protections,
+toutes vérifiables :
+
+- **passages numérotés, citation obligatoire** : chaque affirmation doit
+  porter son `[n]` ;
+- **température nulle** : aucune raison de vouloir de la variété ;
+- **vérification après coup** : les numéros cités sont contrôlés. Hors plage,
+  ils sont signalés ; une réponse sans citation est marquée non étayée.
+
+La réponse est toujours rendue **avec** les passages qui l'ont nourrie : la
+vérification humaine doit rester possible. Le modèle a pour consigne d'écrire
+exactement « La réponse ne figure pas dans les documents fournis » plutôt que
+d'inventer.
 
 ## 10. Skills Claude Code
 
