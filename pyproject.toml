@@ -23,6 +23,10 @@ dependencies = [
 
     # --- Base vectorielle ----------------------------------------------------
     "qdrant-client>=1.12",
+
+    # --- Interface web -------------------------------------------------------
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
 ]
 
 [dependency-groups]
@@ -40,6 +44,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# La page du chatbot est servie depuis le paquet installe.
+legalrag = ["web/static/*"]
 
 [tool.uv]
 # Le paquet lui-meme est installe en mode editable par `uv sync` : les

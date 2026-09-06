@@ -356,6 +356,7 @@ Concrètement :
 | [`pipeline.py`](src/legalrag/pipeline.py) | Orchestration |
 | [`retrieval.py`](src/legalrag/retrieval.py) | Recherche : vectoriel, découpage par article, reranking |
 | [`generation.py`](src/legalrag/generation.py) | Rédaction de la réponse (Groq), avec vérification des citations |
+| [`web/server.py`](src/legalrag/web/server.py) | Interface web FastAPI |
 | [`cli.py`](src/legalrag/cli.py) | Ligne de commande |
 | [`config.py`](src/legalrag/config.py) | Configuration par variables d'environnement |
 
@@ -439,6 +440,41 @@ La réponse est toujours rendue **avec** les passages qui l'ont nourrie : la
 vérification humaine doit rester possible. Le modèle a pour consigne d'écrire
 exactement « La réponse ne figure pas dans les documents fournis » plutôt que
 d'inventer.
+
+## 9 ter. L'interface web
+
+```bash
+uv run legalrag serve
+```
+
+Puis ouvrir <http://127.0.0.1:8000>. Options : `--port`, `--host`,
+`--reload` (rechargement automatique en développement).
+
+La page reprend les couleurs de la charte graphique gouvernementale
+mauritanienne de 2020 — vert `#00A95C`, or `#FFD700`, rouge `#D01C1F` — avec
+les bandes rouges et le croissant du drapeau de 2017.
+
+| Route | Rôle |
+|---|---|
+| `GET /` | La page du chatbot |
+| `GET /api/health` | État du service, liste des documents indexés |
+| `POST /api/ask` | Question → réponse sourcée (JSON) |
+| `GET /docs` | Documentation OpenAPI, générée par FastAPI |
+
+Trois points de conception méritent d'être signalés :
+
+- **Une question prend une à deux minutes** (plafond de débit Voyage).
+  L'interface affiche un compteur de temps écoulé plutôt qu'un sablier muet.
+- **Les traitements sont bloquants**, donc les points d'entrée sont déclarés
+  en `def` et non `async def` : FastAPI les exécute dans un fil séparé. Un
+  verrou sérialise les recherches, ce qui correspond de toute façon au débit
+  autorisé.
+- **Sans clé Groq, le service ne tombe pas** : il renvoie les extraits
+  trouvés, simplement non rédigés.
+
+Les avertissements du moteur — réponse non étayée, citation d'un extrait
+inexistant — sont affichés en rouge dans la page, au même titre que dans le
+terminal.
 
 ## 10. Skills Claude Code
 

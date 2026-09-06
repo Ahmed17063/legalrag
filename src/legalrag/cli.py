@@ -86,6 +86,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Afficher aussi le texte integral des extraits utilises",
     )
 
+    serve_cmd = sub.add_parser("serve", help="Lancer l'interface web du chatbot")
+    serve_cmd.add_argument("--host", default="127.0.0.1", help="Adresse d'ecoute")
+    serve_cmd.add_argument("--port", type=int, default=8000, help="Port d'ecoute")
+    serve_cmd.add_argument(
+        "--reload", action="store_true", help="Recharger a chaque modification (developpement)"
+    )
+
     compact_cmd = sub.add_parser("compact", help="Fusionner les fragments d'un index existant")
     compact_cmd.add_argument(
         "--remove-parts",
@@ -143,6 +150,21 @@ def main(argv: list[str] | None = None) -> int:
                 )
             reponse = Generator(settings).answer(args.question, resultat.passages)
             _afficher_reponse(reponse, en_json=args.json, extraits=args.show_passages)
+
+        elif args.command == "serve":
+            import uvicorn
+
+            print(
+                f"Interface disponible sur http://{args.host}:{args.port}",
+                file=sys.stderr,
+            )
+            uvicorn.run(
+                "legalrag.web.server:app",
+                host=args.host,
+                port=args.port,
+                reload=args.reload,
+                log_level="warning",
+            )
 
         elif args.command == "qdrant":
             rapport = push_to_qdrant(settings, recreate=args.recreate, prune=args.prune)

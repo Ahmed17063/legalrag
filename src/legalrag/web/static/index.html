@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Assistant juridique — Mauritanie</title>
+<style>
+  /* Couleurs de la charte graphique gouvernementale mauritanienne (2020) :
+     vert #00A95C, or #FFD700, rouge #D01C1F. */
+  :root {
+    --vert:        #00A95C;
+    --vert-fonce:  #006233;
+    --vert-nuit:   #00301a;
+    --or:          #FFD700;
+    --or-doux:     #f6e6a8;
+    --rouge:       #D01C1F;
+
+    --fond:        #f6f8f6;
+    --carte:       #ffffff;
+    --texte:       #16241c;
+    --texte-doux:  #5a6b60;
+    --bordure:     #dce5df;
+
+    --rayon: 14px;
+    --ombre: 0 1px 2px rgba(0,48,26,.06), 0 8px 24px rgba(0,48,26,.07);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: var(--fond);
+    color: var(--texte);
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* ---- En-tete : bandes rouges du drapeau de 2017, champ vert ---- */
+  header {
+    background: linear-gradient(180deg, var(--vert-fonce), var(--vert-nuit));
+    color: #fff;
+    border-top: 6px solid var(--rouge);
+    border-bottom: 6px solid var(--rouge);
+    padding: 18px 20px;
+  }
+  .entete {
+    max-width: 860px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .embleme { flex: 0 0 auto; }
+  header h1 {
+    margin: 0;
+    font-size: 1.22rem;
+    font-weight: 650;
+    letter-spacing: .2px;
+  }
+  header p {
+    margin: 2px 0 0;
+    font-size: .84rem;
+    color: var(--or-doux);
+  }
+
+  /* ---- Barre d'options ---- */
+  .options {
+    background: var(--carte);
+    border-bottom: 1px solid var(--bordure);
+  }
+  .options-inner {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 10px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    font-size: .86rem;
+    color: var(--texte-doux);
+  }
+  select {
+    font: inherit;
+    padding: 6px 10px;
+    border: 1px solid var(--bordure);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--texte);
+    max-width: 100%;
+  }
+  select:focus-visible, textarea:focus-visible, button:focus-visible {
+    outline: 3px solid var(--or);
+    outline-offset: 1px;
+  }
+
+  /* ---- Fil de discussion ---- */
+  main {
+    flex: 1;
+    width: 100%;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 22px 20px 8px;
+  }
+
+  .accueil {
+    background: var(--carte);
+    border: 1px solid var(--bordure);
+    border-left: 4px solid var(--or);
+    border-radius: var(--rayon);
+    padding: 18px 20px;
+    box-shadow: var(--ombre);
+  }
+  .accueil h2 { margin: 0 0 6px; font-size: 1rem; }
+  .accueil p  { margin: 0 0 12px; color: var(--texte-doux); font-size: .92rem; }
+  .exemples { display: flex; flex-wrap: wrap; gap: 8px; }
+  .exemple {
+    font: inherit;
+    font-size: .86rem;
+    text-align: left;
+    background: #f0f7f2;
+    border: 1px solid var(--bordure);
+    border-radius: 999px;
+    padding: 7px 14px;
+    cursor: pointer;
+    color: var(--vert-fonce);
+  }
+  .exemple:hover { background: #e3f1e8; border-color: var(--vert); }
+
+  .tour { margin: 18px 0; }
+
+  .question {
+    background: var(--vert-fonce);
+    color: #fff;
+    padding: 12px 16px;
+    border-radius: var(--rayon) var(--rayon) 4px var(--rayon);
+    margin-left: auto;
+    max-width: 85%;
+    width: fit-content;
+    box-shadow: var(--ombre);
+  }
+
+  .reponse {
+    background: var(--carte);
+    border: 1px solid var(--bordure);
+    border-left: 4px solid var(--vert);
+    border-radius: 4px var(--rayon) var(--rayon) var(--rayon);
+    padding: 16px 18px;
+    margin-top: 10px;
+    box-shadow: var(--ombre);
+  }
+  .reponse .corps { white-space: pre-wrap; }
+  .reponse .corps strong { color: var(--vert-fonce); }
+
+  /* Marqueur de citation [1], [2]... */
+  .renvoi {
+    display: inline-block;
+    min-width: 20px;
+    text-align: center;
+    background: var(--or);
+    color: var(--vert-nuit);
+    border-radius: 5px;
+    font-size: .78rem;
+    font-weight: 700;
+    padding: 0 5px;
+    vertical-align: 1px;
+  }
+
+  .alerte {
+    margin-top: 12px;
+    background: #fdf0f0;
+    border: 1px solid #f3c9ca;
+    border-left: 4px solid var(--rouge);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: .88rem;
+    color: #7e1214;
+  }
+
+  .sources { margin-top: 14px; border-top: 1px solid var(--bordure); padding-top: 12px; }
+  .sources h3 {
+    margin: 0 0 8px;
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--texte-doux);
+  }
+  details.source {
+    border: 1px solid var(--bordure);
+    border-radius: 9px;
+    margin-bottom: 7px;
+    background: #fbfdfb;
+  }
+  details.source summary {
+    cursor: pointer;
+    padding: 9px 12px;
+    font-size: .88rem;
+    font-weight: 600;
+    color: var(--vert-fonce);
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  details.source summary::-webkit-details-marker { display: none; }
+  details.source[open] summary { border-bottom: 1px solid var(--bordure); }
+  .extrait {
+    padding: 11px 13px;
+    font-size: .9rem;
+    color: #2c3a31;
+    background: #fff;
+    border-radius: 0 0 8px 8px;
+  }
+  .score {
+    margin-left: auto;
+    font-weight: 500;
+    font-size: .78rem;
+    color: var(--texte-doux);
+  }
+
+  .meta { margin-top: 10px; font-size: .78rem; color: var(--texte-doux); }
+
+  /* ---- Attente ---- */
+  .attente {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--carte);
+    border: 1px solid var(--bordure);
+    border-left: 4px solid var(--or);
+    border-radius: var(--rayon);
+    padding: 15px 18px;
+    margin-top: 10px;
+    box-shadow: var(--ombre);
+  }
+  .rotor {
+    width: 20px; height: 20px;
+    border: 3px solid var(--or-doux);
+    border-top-color: var(--vert);
+    border-radius: 50%;
+    animation: tourne .9s linear infinite;
+    flex: 0 0 auto;
+  }
+  @keyframes tourne { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .rotor { animation-duration: 3s; } }
+  .attente .detail { font-size: .84rem; color: var(--texte-doux); }
+
+  /* ---- Saisie ---- */
+  .saisie { position: sticky; bottom: 0; background: var(--fond); padding: 10px 0 18px; }
+  .saisie-inner {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 20px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  textarea {
+    flex: 1;
+    font: inherit;
+    resize: none;
+    padding: 12px 14px;
+    border: 1px solid var(--bordure);
+    border-radius: var(--rayon);
+    background: #fff;
+    color: var(--texte);
+    min-height: 48px;
+    max-height: 160px;
+    box-shadow: var(--ombre);
+  }
+  button.envoyer {
+    font: inherit;
+    font-weight: 650;
+    color: var(--vert-nuit);
+    background: var(--or);
+    border: none;
+    border-radius: var(--rayon);
+    padding: 13px 22px;
+    cursor: pointer;
+    box-shadow: var(--ombre);
+  }
+  button.envoyer:hover:not(:disabled) { background: #ffe14d; }
+  button.envoyer:disabled { opacity: .45; cursor: not-allowed; }
+
+  footer {
+    text-align: center;
+    font-size: .76rem;
+    color: var(--texte-doux);
+    padding: 0 20px 16px;
+  }
+
+  @media (max-width: 620px) {
+    header h1 { font-size: 1.05rem; }
+    .question { max-width: 95%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="entete">
+    <!-- Croissant et etoile du drapeau, en or sur champ vert -->
+    <svg class="embleme" width="42" height="42" viewBox="0 0 48 48" aria-hidden="true">
+      <path d="M32 10a15 15 0 1 0 0 28 12 12 0 1 1 0-28z" fill="#FFD700"/>
+      <path d="M24 13.5l1.5 4.4h4.6l-3.7 2.7 1.4 4.4-3.8-2.7-3.8 2.7 1.4-4.4-3.7-2.7h4.6z" fill="#FFD700"/>
+    </svg>
+    <div>
+      <h1>Assistant juridique</h1>
+      <p>Codes et textes de loi de la République Islamique de Mauritanie</p>
+    </div>
+  </div>
+</header>
+
+<div class="options">
+  <div class="options-inner">
+    <label for="doc">Rechercher dans :</label>
+    <select id="doc"><option value="">Tous les documents</option></select>
+    <span id="etat-service"></span>
+  </div>
+</div>
+
+<main>
+  <div id="fil">
+    <div class="accueil" id="accueil">
+      <h2>Posez une question sur le corpus</h2>
+      <p>
+        Chaque réponse cite les articles sur lesquels elle s'appuie. Comptez
+        une à deux minutes : le service d'embeddings est limité en débit.
+      </p>
+      <div class="exemples" id="exemples"></div>
+    </div>
+  </div>
+</main>
+
+<div class="saisie">
+  <div class="saisie-inner">
+    <textarea id="question" rows="1" placeholder="Votre question…"
+              aria-label="Votre question"></textarea>
+    <button class="envoyer" id="envoyer">Demander</button>
+  </div>
+</div>
+
+<footer>
+  Les réponses sont produites automatiquement à partir des textes indexés.
+  Vérifiez toujours l'article cité avant tout usage juridique.
+</footer>
+
+<script>
+const EXEMPLES = [
+  "Une personne acquittée peut-elle être rejugée pour les mêmes faits ?",
+  "Quelles sont les obligations du père concernant l'entretien de son enfant ?",
+  "Quelles sont les voies de recours après un jugement ?",
+];
+
+const fil       = document.getElementById("fil");
+const champ     = document.getElementById("question");
+const bouton    = document.getElementById("envoyer");
+const selectDoc = document.getElementById("doc");
+const etatSvc   = document.getElementById("etat-service");
+let occupe = false;
+
+// --- Amorçage ---------------------------------------------------------
+for (const texte of EXEMPLES) {
+  const b = document.createElement("button");
+  b.className = "exemple";
+  b.textContent = texte;
+  b.onclick = () => { champ.value = texte; champ.focus(); ajusterHauteur(); };
+  document.getElementById("exemples").appendChild(b);
+}
+
+fetch("/api/health").then(r => r.json()).then(sante => {
+  if (sante.erreur) {
+    etatSvc.textContent = "⚠ " + sante.erreur;
+    etatSvc.style.color = "var(--rouge)";
+    bouton.disabled = true;
+    return;
+  }
+  for (const d of sante.documents) {
+    const o = document.createElement("option");
+    o.value = d.document_id;
+    o.textContent = `${d.document} (${d.chunks})`;
+    selectDoc.appendChild(o);
+  }
+  if (!sante.generation) {
+    etatSvc.textContent = "⚠ Rédaction indisponible : seuls les extraits seront affichés.";
+    etatSvc.style.color = "var(--rouge)";
+  }
+}).catch(() => {
+  etatSvc.textContent = "⚠ Service injoignable.";
+  etatSvc.style.color = "var(--rouge)";
+});
+
+// --- Saisie -----------------------------------------------------------
+function ajusterHauteur() {
+  champ.style.height = "auto";
+  champ.style.height = Math.min(champ.scrollHeight, 160) + "px";
+}
+champ.addEventListener("input", ajusterHauteur);
+champ.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); demander(); }
+});
+bouton.onclick = demander;
+
+// --- Rendu ------------------------------------------------------------
+function echapper(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+/** Met en valeur les marqueurs [1], [2]… du texte de la réponse. */
+function baliser(texte) {
+  return echapper(texte).replace(/\[(\d{1,2})\]/g,
+    '<span class="renvoi">$1</span>');
+}
+
+function ajouterQuestion(texte) {
+  document.getElementById("accueil")?.remove();
+  const tour = document.createElement("div");
+  tour.className = "tour";
+  tour.innerHTML = `<div class="question">${echapper(texte)}</div>`;
+  fil.appendChild(tour);
+  defiler();
+  return tour;
+}
+
+function attente(tour) {
+  const bloc = document.createElement("div");
+  bloc.className = "attente";
+  bloc.innerHTML = `<div class="rotor"></div>
+    <div><div>Recherche dans le corpus…</div>
+    <div class="detail"><span id="chrono">0</span> s — une à deux minutes sont normales</div></div>`;
+  tour.appendChild(bloc);
+  defiler();
+  const depart = Date.now();
+  const t = setInterval(() => {
+    const el = document.getElementById("chrono");
+    if (el) el.textContent = Math.round((Date.now() - depart) / 1000);
+  }, 1000);
+  return () => { clearInterval(t); bloc.remove(); };
+}
+
+function ajouterReponse(tour, data) {
+  const bloc = document.createElement("div");
+  bloc.className = "reponse";
+
+  const corps = document.createElement("div");
+  corps.className = "corps";
+  corps.innerHTML = baliser(data.answer ?? data.raison ?? "Aucune réponse.");
+  bloc.appendChild(corps);
+
+  // Les réserves comptent autant que la réponse : sur du droit, une
+  // affirmation non rattachée à un texte ne vaut rien.
+  if (data.answer && !data.grounded && !data.declined) {
+    const a = document.createElement("div");
+    a.className = "alerte";
+    a.textContent = data.invalid_citations?.length
+      ? `Le modèle cite des extraits inexistants (${data.invalid_citations.join(", ")}). Vérifiez les articles ci-dessous.`
+      : "Cette réponse ne cite aucun extrait : rien ne la rattache aux textes. À vérifier.";
+    bloc.appendChild(a);
+  }
+
+  const passages = data.passages ?? [];
+  if (passages.length) {
+    const s = document.createElement("div");
+    s.className = "sources";
+    s.innerHTML = "<h3>Articles consultés</h3>";
+    passages.forEach((p, i) => {
+      const d = document.createElement("details");
+      d.className = "source";
+      d.innerHTML =
+        `<summary><span class="renvoi">${i + 1}</span>${echapper(p.citation)}
+         <span class="score">${(p.score * 100).toFixed(0)} %</span></summary>
+         <div class="extrait">${echapper(p.text)}</div>`;
+      s.appendChild(d);
+    });
+    bloc.appendChild(s);
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  const bouts = [`${data.duree} s`];
+  if (data.chunks_examined) bouts.push(`${data.chunks_examined} chunks → ${data.passages_examined} passages`);
+  if (data.model) bouts.push(data.model);
+  meta.textContent = bouts.join(" · ");
+  bloc.appendChild(meta);
+
+  tour.appendChild(bloc);
+  defiler();
+}
+
+function ajouterErreur(tour, message) {
+  const bloc = document.createElement("div");
+  bloc.className = "reponse";
+  bloc.innerHTML = `<div class="alerte">${echapper(message)}</div>`;
+  tour.appendChild(bloc);
+  defiler();
+}
+
+function defiler() { window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); }
+
+// --- Appel ------------------------------------------------------------
+async function demander() {
+  const texte = champ.value.trim();
+  if (!texte || occupe) return;
+
+  occupe = true;
+  bouton.disabled = true;
+  champ.value = "";
+  ajusterHauteur();
+
+  const tour = ajouterQuestion(texte);
+  const arreter = attente(tour);
+
+  try {
+    const r = await fetch("/api/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: texte, document_id: selectDoc.value || null }),
+    });
+    arreter();
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      ajouterErreur(tour, err.detail || `Erreur ${r.status}`);
+    } else {
+      ajouterReponse(tour, await r.json());
+    }
+  } catch (e) {
+    arreter();
+    ajouterErreur(tour, "Le service est injoignable. " + e.message);
+  } finally {
+    occupe = false;
+    bouton.disabled = false;
+    champ.focus();
+  }
+}
+</script>
+</body>
+</html>

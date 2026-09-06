@@ -323,6 +323,37 @@ class Retriever:
         ]
         return classes, int(data.get("usage", {}).get("total_tokens", 0))
 
+    def documents(self) -> list[dict[str, Any]]:
+        """Documents presents dans la collection, avec leur nombre de chunks.
+
+        Sert a alimenter le filtre de l'interface. La collection tient en
+        quelques centaines de points : un parcours complet est moins couteux
+        qu'une agregation, et fonctionne sur toutes les versions de Qdrant.
+        """
+        compte: dict[str, dict[str, Any]] = {}
+        offset = None
+        while True:
+            points, offset = self._client.scroll(
+                self._settings.qdrant_collection,
+                limit=1000,
+                offset=offset,
+                with_payload=["document", "document_id"],
+                with_vectors=False,
+            )
+            for point in points:
+                charge = point.payload or {}
+                cle = charge.get("document_id")
+                if not cle:
+                    continue
+                entree = compte.setdefault(
+                    cle, {"document_id": cle, "document": charge.get("document", cle), "chunks": 0}
+                )
+                entree["chunks"] += 1
+            if offset is None:
+                break
+
+        return sorted(compte.values(), key=lambda d: -d["chunks"])
+
     # -- recherche ---------------------------------------------------------
 
     def search(
@@ -409,3 +440,4 @@ def _make_client(settings: Settings) -> QdrantClient:
     if settings.qdrant_url:
         return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key, timeout=60)
     return QdrantClient(path=str(settings.qdrant_path))
+
