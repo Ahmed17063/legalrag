@@ -237,7 +237,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         retrieval_top_n=_env_int("RETRIEVAL_TOP_N", 5),
         groq_api_key=_env("GROQ_API_KEY"),
         generation_model=_env("GENERATION_MODEL", "openai/gpt-oss-120b"),
-        generation_max_tokens=_env_int("GENERATION_MAX_TOKENS", 1024),
+        generation_max_tokens=_env_int("GENERATION_MAX_TOKENS", 2048),
     )
 
 

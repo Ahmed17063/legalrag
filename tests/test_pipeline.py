@@ -84,7 +84,7 @@ def settings(tmp_path: Path) -> Settings:
         retrieval_top_n=5,
         groq_api_key="cle-groq-de-test",
         generation_model="openai/gpt-oss-120b",
-        generation_max_tokens=1024,
+        generation_max_tokens=2048,
     )
 
 

@@ -251,3 +251,34 @@ def test_sortie_json_serialisable(settings, monkeypatch):
     rejoue = json.loads(json.dumps(r.as_dict(), ensure_ascii=False))
     assert rejoue["grounded"] is True
     assert rejoue["sources"] == ["[1] Code de Procedure Penale, art. 326 (p. 127-128)"]
+
+
+# ---------------------------------------------------------------------------
+# Ordre juridique : un texte europeen n'est pas le droit mauritanien
+# ---------------------------------------------------------------------------
+
+
+def consigne_a_plat() -> str:
+    """La consigne, sans les retours a la ligne de sa mise en forme."""
+    return " ".join(SYSTEM_PROMPT.split()).lower()
+
+
+def test_consigne_impose_de_situer_l_ordre_juridique():
+    """Constate en conditions reelles : interroge sur les obligations de
+    declaration des captures, le modele a repondu uniquement en droit
+    europeen, sans signaler que le reglement 1224/2009 ne s'applique pas a
+    un navire sous pavillon mauritanien."""
+    consigne = consigne_a_plat()
+    assert "mauritanien" in consigne
+    assert "europ" in consigne
+    assert "ne s'applique pas de plein droit" in consigne
+
+
+def test_consigne_demande_de_signaler_l_absence_de_droit_national():
+    assert "n'a pas ete retrouve" in consigne_a_plat()
+
+
+def test_plafond_de_sortie_suffisant(settings):
+    """Une reponse juridique detaillee depasse 1024 tokens : la precedente
+    valeur tronquait la reponse au milieu d'une phrase."""
+    assert settings.generation_max_tokens >= 2048
