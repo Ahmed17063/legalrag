@@ -269,3 +269,138 @@ def test_document_unique_scinde_par_le_budget_de_requete():
     # Aucun chunk perdu, aucun duplique.
     envoyes = [c.chunk_id for lot in lots for groupe in lot for c in groupe]
     assert sorted(envoyes) == sorted(c.chunk_id for c in document)
+
+
+# -- resilience d'un job long ----------------------------------------------
+
+
+class LimiteurMuet:
+    """Limiteur qui n'attend jamais : les tests ne doivent pas dormir."""
+
+    budget_tokens = 10_000
+
+    def acquire(self, tokens):
+        pass
+
+    def penalize(self, *args, **kwargs):
+        return self.budget_tokens
+
+
+def embedder_sans_attente(monkeypatch, **kwargs):
+    """Un embedder a petits lots, dont le limiteur ne temporise pas."""
+    embedder = make_embedder(max_tokens_per_minute=10_000, **kwargs)
+    muet = LimiteurMuet()
+    monkeypatch.setattr(embedder, "_limiter", muet)
+    monkeypatch.setattr(embedder._transport, "limiter", muet)
+    return embedder
+
+
+def test_un_lot_en_echec_n_arrete_pas_le_job(monkeypatch):
+    """Un job de plusieurs heures traverse forcement un incident.
+
+    Constate en conditions reelles : la machine s'est mise en veille, le
+    lot en cours a echoue au reveil, et tout le job s'est arrete apres
+    22 chunks sur 10 942.
+    """
+    from legalrag.voyage_http import RetryableAPIError
+
+    embedder = embedder_sans_attente(monkeypatch)
+    fake = FakeAPI()
+    appels = {"n": 0}
+
+    def post(endpoint, payload):
+        appels["n"] += 1
+        if appels["n"] == 2:
+            raise RetryableAPIError("veille de la machine")
+        return fake(endpoint, payload)
+
+    monkeypatch.setattr(embedder, "_post", post)
+
+    groups = [[chunk(0, tokens=4000, document=f"doc{i}")] for i in range(10)]
+    resultats = [item for batch in embedder.embed(groups) for item in batch]
+
+    assert embedder.failed_batches == 1
+    # L'essentiel a ete traite malgre l'incident : seul le lot fautif est
+    # perdu, et la reprise le rattrapera.
+    assert len(resultats) == 10 - embedder.failed_chunks
+    assert len(resultats) >= 8
+
+
+def test_echecs_consecutifs_interrompent_le_job(monkeypatch):
+    """Inutile de defiler des heures d'erreurs si rien n'aboutit jamais."""
+    from legalrag.voyage_http import RetryableAPIError
+
+    embedder = embedder_sans_attente(monkeypatch)
+
+    def toujours_refuse(endpoint, payload):
+        raise RetryableAPIError("quota refuse")
+
+    monkeypatch.setattr(embedder, "_post", toujours_refuse)
+
+    groups = [[chunk(0, tokens=4000, document=f"doc{i}")] for i in range(20)]
+    with pytest.raises(EmbeddingError, match="consecutifs"):
+        list(embedder.embed(groups))
+
+    assert embedder.failed_batches == 5
+
+
+def test_le_compteur_d_echecs_se_remet_a_zero(monkeypatch):
+    """Un echec isole ne doit pas rapprocher le job de l'interruption."""
+    from legalrag.voyage_http import RetryableAPIError
+
+    embedder = embedder_sans_attente(monkeypatch)
+    fake = FakeAPI()
+    appels = {"n": 0}
+
+    def post(endpoint, payload):
+        appels["n"] += 1
+        if appels["n"] % 3 == 0:
+            raise RetryableAPIError("incident passager")
+        return fake(endpoint, payload)
+
+    monkeypatch.setattr(embedder, "_post", post)
+
+    groups = [[chunk(0, tokens=4000, document=f"doc{i}")] for i in range(20)]
+    resultats = [item for batch in embedder.embed(groups) for item in batch]
+
+    # Un echec sur trois, jamais cinq d'affilee : le job va au bout sans
+    # declencher l'interruption, et l'essentiel est plonge.
+    assert embedder.failed_batches >= 2
+    assert len(resultats) >= 10
+
+
+def test_erreur_systematique_arrete_le_job(monkeypatch):
+    """Une reponse incoherente signale un bug, pas un incident passager."""
+    embedder = embedder_sans_attente(monkeypatch)
+    monkeypatch.setattr(
+        embedder, "_post", lambda e, p: {"data": [], "usage": {"total_tokens": 0}}
+    )
+    with pytest.raises(EmbeddingError, match="incoherente"):
+        list(embedder.embed([[chunk(0)]]))
+
+
+def test_penalite_de_debit_apres_un_refus():
+    """Un 429 doit ralentir durablement, pas seulement declencher un reessai."""
+    from legalrag.voyage_http import RateLimiter
+
+    limiter = RateLimiter(max_requests_per_minute=200, max_tokens_per_minute=10_000)
+    assert limiter.budget_tokens == 10_000
+    assert limiter.penalize() == 7_500
+    assert limiter.penalize() == 5_625
+
+
+def test_penalite_bornee_par_un_plancher():
+    from legalrag.voyage_http import RateLimiter
+
+    limiter = RateLimiter(200, 10_000)
+    for _ in range(30):
+        limiter.penalize()
+    assert limiter.budget_tokens == 2_000
+
+
+def test_taille_des_lots_suit_le_debit_reduit():
+    """Apres penalite, les lots suivants doivent retrecir."""
+    embedder = make_embedder(max_tokens_per_minute=10_000)
+    avant = embedder._token_budget
+    embedder._transport.limiter.penalize()
+    assert embedder._token_budget < avant

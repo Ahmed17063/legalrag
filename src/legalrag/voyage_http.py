@@ -59,6 +59,29 @@ class RateLimiter:
         while self._tokens and self._tokens[0][0] < horizon:
             self._tokens.popleft()
 
+    def penalize(self, facteur: float = 0.75, plancher: int = 2_000) -> int:
+        """Reduit durablement le budget apres un refus du serveur.
+
+        Un 429 signifie que notre comptage local est plus optimiste que
+        celui du serveur — fenetres desynchronisees, ou tokens comptes
+        differemment. Continuer au meme rythme ne ferait que collectionner
+        les refus : on ralentit pour de bon.
+        """
+        with self._lock:
+            ancien = self._max_tokens
+            self._max_tokens = max(plancher, int(self._max_tokens * facteur))
+            if self._max_tokens != ancien:
+                logger.warning(
+                    "Debit reduit de %d a %d tokens/min apres un refus du serveur",
+                    ancien,
+                    self._max_tokens,
+                )
+            return self._max_tokens
+
+    @property
+    def budget_tokens(self) -> int:
+        return self._max_tokens
+
     def acquire(self, tokens: int) -> None:
         """Bloque jusqu'a ce que le budget de la minute glissante le permette."""
         while True:
@@ -110,13 +133,13 @@ class VoyageTransport:
             {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         )
 
-    # Backoff calibre sur un compte tres plafonne : a 3 requetes par minute,
-    # repartir au bout de 2 secondes ne fait que reconsommer le quota. On
-    # attend d'emblee l'ordre de grandeur d'une fenetre.
+    # Backoff calibre sur un compte tres plafonne. Un job de plusieurs
+    # heures traverse forcement des refus passagers : mieux vaut attendre
+    # longtemps que renoncer.
     @retry(
         retry=retry_if_exception_type(RetryableAPIError),
-        stop=stop_after_attempt(8),
-        wait=wait_exponential_jitter(initial=20, max=120),
+        stop=stop_after_attempt(12),
+        wait=wait_exponential_jitter(initial=20, max=300),
         reraise=True,
     )
     def post(self, endpoint: str, payload: dict) -> dict:
@@ -133,9 +156,11 @@ class VoyageTransport:
         body = response.text[:500]
 
         if response.status_code == 429:
+            # Notre comptage etait trop optimiste : on ralentit durablement
+            # plutot que de rejouer au meme rythme.
+            budget = self.limiter.penalize()
             raise RetryableAPIError(
-                f"debit refuse (429). Budget configure : "
-                f"{self.max_tokens_per_minute} tokens/min. Reponse : {body}"
+                f"debit refuse (429). Budget ramene a {budget} tokens/min. Reponse : {body}"
             )
         if response.status_code >= 500:
             raise RetryableAPIError(f"erreur serveur ({response.status_code}) : {body}")

@@ -62,6 +62,10 @@ MAX_TOKENS_PER_DOCUMENT = 32_000
 SAFETY_RATIO_EXACT = 0.95
 SAFETY_RATIO_APPROX = 0.75
 
+# Au-dela, l'incident n'est plus passager : inutile de defiler des
+# milliers d'erreurs pendant des heures sans qu'aucun lot n'aboutisse.
+MAX_ECHECS_CONSECUTIFS = 5
+
 
 @dataclass(frozen=True, slots=True)
 class EmbeddedChunk:
@@ -102,6 +106,11 @@ class VoyageEmbedder:
         self._limiter = self._transport.limiter
 
         self.total_tokens_billed = 0
+        # Un lot peut echouer sans condamner le job : on compte les
+        # pertes pour les signaler a la fin.
+        self.failed_batches = 0
+        self.failed_chunks = 0
+        self._echecs_consecutifs = 0
 
     # -- budgets -----------------------------------------------------------
 
@@ -113,8 +122,13 @@ class VoyageEmbedder:
         par minute : un lot plus gros que le quota d'une minute serait
         rejete a chaque tentative, et aucun reessai ne le sauverait. Cela
         arrive sur les comptes sans moyen de paiement, plafonnes tres bas.
+
+        La valeur est relue a chaque lot plutot que figee : un refus du
+        serveur reduit le budget du limiteur, et les lots suivants doivent
+        retrecir en consequence.
         """
-        return int(min(MAX_TOKENS_PER_REQUEST, self._max_tokens_per_minute) * self._ratio)
+        debit = self._transport.limiter.budget_tokens
+        return int(min(MAX_TOKENS_PER_REQUEST, debit) * self._ratio)
 
     @property
     def _document_token_budget(self) -> int:
@@ -269,14 +283,65 @@ class VoyageEmbedder:
                     sum(len(g) for g in batch),
                     tokens,
                 )
-                yield self._embed_contextual_batch(batch)
+                resultat = self._tenter(
+                    self._embed_contextual_batch, batch, sum(len(g) for g in batch), index
+                )
+                if resultat:
+                    yield resultat
         else:
             flat = [chunk for group in groups for chunk in group]
             for index, batch in enumerate(self._pack_standard(flat), start=1):
                 tokens = sum(c.token_count for c in batch)
                 self._limiter.acquire(tokens)
                 logger.info("Lot %d : %d chunk(s), ~%d tokens", index, len(batch), tokens)
-                yield self._embed_standard_batch(batch)
+                resultat = self._tenter(self._embed_standard_batch, batch, len(batch), index)
+                if resultat:
+                    yield resultat
+
+        if self.failed_chunks:
+            logger.warning(
+                "%d lot(s) abandonne(s), %d chunk(s) non plonge(s). "
+                "Relancer la commande les reprendra : rien n'est perdu.",
+                self.failed_batches,
+                self.failed_chunks,
+            )
+
+    def _tenter(self, traitement, batch, nb_chunks: int, index: int) -> list[EmbeddedChunk]:
+        """Traite un lot, en encaissant son echec eventuel.
+
+        Un job de plusieurs heures traverse forcement un incident : veille
+        de la machine, coupure reseau, quota refuse malgre les reessais.
+        Faire echouer tout le job pour un lot serait absurde alors que
+        l'index est incremental et que la reprise sait ou reprendre.
+
+        Seuls les incidents **transitoires** sont encaisses. Une reponse
+        incoherente ou une authentification refusee sont systematiques :
+        les avaler ferait defiler des milliers d'erreurs pendant des heures
+        sans qu'aucun lot n'aboutisse. Elles remontent donc, et le job
+        s'arrete tout de suite.
+        """
+        try:
+            resultat = traitement(batch)
+        except RetryableAPIError as exc:
+            self.failed_batches += 1
+            self.failed_chunks += nb_chunks
+            self._echecs_consecutifs += 1
+            logger.error(
+                "Lot %d abandonne (%d chunk(s)) : %s. Le job continue.",
+                index,
+                nb_chunks,
+                exc,
+            )
+            if self._echecs_consecutifs >= MAX_ECHECS_CONSECUTIFS:
+                raise EmbeddingError(
+                    f"{self._echecs_consecutifs} lots consecutifs en echec : "
+                    "le probleme n'est pas passager. Job interrompu, la reprise "
+                    "repartira des chunks deja ecrits."
+                ) from exc
+            return []
+
+        self._echecs_consecutifs = 0
+        return resultat
 
 
 # -- utilitaires de decodage des reponses ----------------------------------
