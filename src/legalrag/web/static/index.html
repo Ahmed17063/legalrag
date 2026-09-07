@@ -151,8 +151,19 @@
     margin-top: 10px;
     box-shadow: var(--ombre);
   }
-  .reponse .corps { white-space: pre-wrap; }
+  .reponse .corps p { margin: 0 0 10px; }
+  .reponse .corps p:last-child { margin-bottom: 0; }
   .reponse .corps strong { color: var(--vert-fonce); }
+  .reponse .corps ul,
+  .reponse .corps ol { margin: 0 0 10px; padding-left: 22px; }
+  .reponse .corps li { margin-bottom: 5px; }
+  .reponse .corps li::marker { color: var(--vert); }
+  .reponse .corps code {
+    background: #f0f4f1;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: .92em;
+  }
 
   /* Marqueur de citation [1], [2]... */
   .renvoi {
@@ -413,10 +424,63 @@ function echapper(s) {
   return d.innerHTML;
 }
 
-/** Met en valeur les marqueurs [1], [2]… du texte de la réponse. */
-function baliser(texte) {
-  return echapper(texte).replace(/\[(\d{1,2})\]/g,
-    '<span class="renvoi">$1</span>');
+/** Applique le formatage en ligne à du texte DÉJÀ échappé. */
+function enLigne(echappe) {
+  return echappe
+    // Le gras avant l'italique : sinon `**x**` serait lu comme deux italiques.
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s.,;:)]|$)/g, "$1<em>$2</em>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    // Marqueurs de citation [1], [2]…
+    .replace(/\[(\d{1,2})\]/g, '<span class="renvoi">$1</span>');
+}
+
+/**
+ * Rend le Markdown produit par le modèle : gras, italique, listes à puces
+ * et numérotées. L'échappement HTML est fait AVANT toute mise en forme,
+ * donc rien de ce que renvoie le modèle ne peut injecter de balise.
+ */
+function rendreMarkdown(texte) {
+  const lignes = echapper(texte).split("\n");
+  const sortie = [];
+  let liste = null;      // "ul" | "ol" | null
+  let paragraphe = [];
+
+  const viderParagraphe = () => {
+    if (paragraphe.length) {
+      sortie.push(`<p>${enLigne(paragraphe.join(" "))}</p>`);
+      paragraphe = [];
+    }
+  };
+  const fermerListe = () => {
+    if (liste) { sortie.push(`</${liste}>`); liste = null; }
+  };
+
+  for (const ligne of lignes) {
+    const nu = ligne.trim();
+
+    if (!nu) { viderParagraphe(); fermerListe(); continue; }
+
+    const puce = nu.match(/^[*+-]\s+(.*)$/);
+    const numero = nu.match(/^\d{1,2}[.)]\s+(.*)$/);
+
+    if (puce || numero) {
+      viderParagraphe();
+      const type = puce ? "ul" : "ol";
+      if (liste !== type) { fermerListe(); sortie.push(`<${type}>`); liste = type; }
+      sortie.push(`<li>${enLigne((puce || numero)[1])}</li>`);
+      continue;
+    }
+
+    // Une ligne ordinaire qui suit une liste la poursuit rarement : on
+    // ferme, quitte à produire deux blocs plutôt qu'un mélange illisible.
+    fermerListe();
+    paragraphe.push(nu);
+  }
+
+  viderParagraphe();
+  fermerListe();
+  return sortie.join("");
 }
 
 function ajouterQuestion(texte) {
@@ -451,7 +515,7 @@ function ajouterReponse(tour, data) {
 
   const corps = document.createElement("div");
   corps.className = "corps";
-  corps.innerHTML = baliser(data.answer ?? data.raison ?? "Aucune réponse.");
+  corps.innerHTML = rendreMarkdown(data.answer ?? data.raison ?? "Aucune réponse.");
   bloc.appendChild(corps);
 
   // Les réserves comptent autant que la réponse : sur du droit, une
