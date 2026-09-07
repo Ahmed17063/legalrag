@@ -29,6 +29,12 @@ from pathlib import Path
 
 import pyarrow.dataset as ds
 from qdrant_client import QdrantClient, models
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential_jitter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +62,22 @@ PAYLOAD_FIELDS = (
 # un code, a une plage de pages, a une version horodatee).
 _KEYWORD_INDEXES = ("document_id", "timestamp")
 _INTEGER_INDEXES = ("page_start", "page_end")
+
+# Au-dela, l'incident n'est plus passager.
+MAX_ECHECS_CONSECUTIFS = 5
+
+
+def _est_transitoire(exc: BaseException) -> bool:
+    """Un incident reseau se rejoue ; une collection absente, non.
+
+    Un cluster Qdrant gratuit ferme parfois la connexion sans repondre
+    au milieu d'un chargement de plusieurs milliers de points.
+    """
+    nom = type(exc).__name__
+    if nom in {"ResponseHandlingException", "ConnectionError", "Timeout", "TimeoutError"}:
+        return True
+    statut = getattr(exc, "status_code", None)
+    return statut in {429, 500, 502, 503, 504}
 
 
 class QdrantStoreError(RuntimeError):
@@ -190,25 +212,76 @@ class QdrantIndex:
 
     # -- chargement --------------------------------------------------------
 
-    def upsert(self, index_path: Path, batch_size: int = 128) -> int:
+    @retry(
+        retry=retry_if_exception(_est_transitoire),
+        stop=stop_after_attempt(6),
+        wait=wait_exponential_jitter(initial=2, max=60),
+        reraise=True,
+    )
+    def _upsert_lot(self, points: list[models.PointStruct]) -> None:
+        self._client.upsert(self._collection, points=points, wait=True)
+
+    def upsert(self, index_path: Path, batch_size: int = 64, reprendre: bool = True) -> int:
         """Charge l'index Parquet. Renvoie le nombre de points ecrits.
 
         Le fichier est lu par lots : l'index tient ici en memoire, mais
         rien n'oblige a ce que ce soit toujours le cas.
+
+        Un chargement de plusieurs milliers de points traverse forcement un
+        incident reseau — un cluster gratuit ferme parfois la connexion sans
+        repondre. Chaque lot est donc reessaye, et `reprendre` saute ce qui
+        est deja en base : relancer apres un echec ne recharge que le reste.
         """
-        total = 0
-        for points in self._iter_points(index_path, batch_size):
-            self._client.upsert(self._collection, points=points, wait=True)
+        deja = self.existing_chunk_ids() if reprendre else set()
+        if deja:
+            logger.info("Reprise : %d point(s) deja en base", len(deja))
+
+        total = ignores = echecs = 0
+        consecutifs = 0
+
+        for points in self._iter_points(index_path, batch_size, ignorer=deja):
+            if not points:
+                continue
+            try:
+                self._upsert_lot(points)
+            except Exception as exc:  # noqa: BLE001 - un lot perdu n'arrete pas tout
+                echecs += len(points)
+                consecutifs += 1
+                logger.error(
+                    "Lot de %d point(s) abandonne : %s. Le chargement continue.",
+                    len(points),
+                    exc,
+                )
+                if consecutifs >= MAX_ECHECS_CONSECUTIFS:
+                    raise QdrantStoreError(
+                        f"{consecutifs} lots consecutifs en echec : le probleme "
+                        "n'est pas passager. Relancer la commande reprendra ou "
+                        "le chargement s'est arrete."
+                    ) from exc
+                continue
+
+            consecutifs = 0
             total += len(points)
             logger.info("Charges : %d point(s)", total)
+
+        if echecs:
+            logger.warning(
+                "%d point(s) non charge(s). Relancer la commande les reprendra.", echecs
+            )
         return total
 
-    def _iter_points(self, index_path: Path, batch_size: int) -> Iterator[list[models.PointStruct]]:
+    def _iter_points(
+        self,
+        index_path: Path,
+        batch_size: int,
+        ignorer: set[str] | None = None,
+    ) -> Iterator[list[models.PointStruct]]:
         dataset = ds.dataset(index_path, format="parquet")
         colonnes = [*PAYLOAD_FIELDS, "embedding"]
+        ignorer = ignorer or set()
 
         for batch in dataset.to_batches(columns=colonnes, batch_size=batch_size):
-            lignes = batch.to_pylist()
+            lignes = [l for l in batch.to_pylist() if l["chunk_id"] not in ignorer]
             if not lignes:
                 continue
             yield [

@@ -254,3 +254,69 @@ def test_cle_api_signalee_sans_etre_affichee():
     description = cible.describe()
     assert "cle d'API" in description
     assert "secret-a-ne-pas-afficher" not in description
+
+
+# -- resilience d'un chargement long ---------------------------------------
+
+
+def test_incident_reseau_rejoue(index, index_parquet, monkeypatch):
+    """Un cluster gratuit ferme parfois la connexion sans repondre."""
+    from qdrant_client.http.exceptions import ResponseHandlingException
+
+    index.ensure_collection()
+    appels = {"n": 0}
+    vrai = index._client.upsert
+
+    def upsert(collection, points, wait=True):
+        appels["n"] += 1
+        if appels["n"] == 1:
+            raise ResponseHandlingException("Server disconnected without sending a response")
+        return vrai(collection, points=points, wait=wait)
+
+    monkeypatch.setattr(index._client, "upsert", upsert)
+
+    assert index.upsert(index_parquet) == 3
+    assert appels["n"] >= 2  # le lot a bien ete rejoue
+
+
+def test_reprise_saute_ce_qui_est_deja_charge(index, index_parquet, client):
+    """Relancer apres un echec ne doit pas tout recharger."""
+    index.ensure_collection()
+    index.upsert(index_parquet)
+
+    # Deuxieme passage : tout est deja la, rien a envoyer.
+    assert index.upsert(index_parquet) == 0
+    assert index.count() == 3
+
+
+def test_sans_reprise_tout_est_recharge(index, index_parquet):
+    index.ensure_collection()
+    index.upsert(index_parquet)
+    assert index.upsert(index_parquet, reprendre=False) == 3
+
+
+def test_echecs_consecutifs_interrompent(index, index_parquet, monkeypatch):
+    """Si rien n'aboutit jamais, inutile de continuer."""
+    from qdrant_client.http.exceptions import ResponseHandlingException
+
+    index.ensure_collection()
+
+    def toujours_casse(collection, points, wait=True):
+        raise ResponseHandlingException("panne")
+
+    monkeypatch.setattr(index._client, "upsert", toujours_casse)
+    monkeypatch.setattr("legalrag.qdrant_store.MAX_ECHECS_CONSECUTIFS", 1)
+
+    with pytest.raises(QdrantStoreError, match="consecutifs"):
+        index.upsert(index_parquet, batch_size=1)
+
+
+def test_erreur_non_transitoire_ne_se_rejoue_pas():
+    from legalrag.qdrant_store import _est_transitoire
+
+    class FauxTimeout(Exception):
+        pass
+
+    FauxTimeout.__name__ = "Timeout"
+    assert _est_transitoire(FauxTimeout())
+    assert not _est_transitoire(ValueError("collection introuvable"))
