@@ -53,8 +53,13 @@ secrets/
 *service-account*.json
 *credentials*.json
 
-# Donnees generees : cache de telechargement et index d'embeddings
-data/
+# Donnees generees : cache de telechargement et index d'embeddings.
+# On exclut le CONTENU et non le repertoire : git n'entre jamais dans un
+# repertoire exclu, et l'exception ci-dessous serait sans effet.
+data/*
+# Le registre des statuts est un travail de qualification juridique fait a
+# la main, pas une donnee generee : le perdre couterait cher.
+!data/statuts.json
 
 # Artefacts de build (pip install -e .)
 *.egg-info/

@@ -1,0 +1,173 @@
+{
+  "_lisez_moi": "Statut juridique des documents du corpus. Resolu a la recherche, pas dans l'index : modifier ce fichier ne demande aucun reembedding. Valeurs : en_vigueur, abroge, inconnu. Un document absent est traite comme inconnu, jamais comme en vigueur.",
+  "documents": {
+    "mauritanie-recueil-01-droit-civil": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-02-procedure-civile": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-03-droit-penal": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-04-investissements": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-05-droit-sante": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-06-fonction-publique": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-07-droit-des-collectivites-territoriales": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-08-marches-publics": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-09-finances-publiques": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-10-droit-fiscal": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-11-assurances": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-12-bancaire": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-13-hydrocarbures": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-14-droit-minier": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-15-energie": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-16-droit-du-travail": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-17-securite-sociale": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-18-droit-foncier": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-19-environnement": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-20-telecommunications": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-21-propriete-intellectuelle": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-22-droit-commercial-droit-societes": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-23-transports": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-24-education": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-25-droit-electoral": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-26-urbanisme": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-27-douanes": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-28-droit-maritime": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-29-aviation-civile": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "mauritanie-recueil-30-droit-rural": {
+      "statut": "en_vigueur",
+      "note": "Recueil officiel SGG, mis a jour des JO parus au 1er janvier 2026"
+    },
+    "constitution": {
+      "statut": "en_vigueur",
+      "note": "Constitution consolidee"
+    },
+    "ue-reglement-1005-2008-peche-inn": {
+      "statut": "en_vigueur",
+      "note": "Droit de l'Union. Non applicable de plein droit en Mauritanie."
+    },
+    "ue-reglement-1224-2009-controle": {
+      "statut": "en_vigueur",
+      "note": "Droit de l'Union. Non applicable de plein droit en Mauritanie."
+    },
+    "ue-reglement-404-2011-modalites-controle": {
+      "statut": "en_vigueur",
+      "note": "Droit de l'Union. Non applicable de plein droit en Mauritanie."
+    },
+    "ue-reglement-2403-2017-flottes-externes": {
+      "statut": "en_vigueur",
+      "note": "Droit de l'Union. Non applicable de plein droit en Mauritanie."
+    },
+    "cpccafr-mis-a-jours-2021": {
+      "statut": "inconnu",
+      "note": "Version 2021, anterieure aux recueils 2026 : a comparer avant usage"
+    },
+    "convention-2012-fr": {
+      "statut": "inconnu",
+      "note": "Convention miniere de 2012"
+    },
+    "code-de-procedure-penale": {
+      "statut": "inconnu",
+      "note": "Version scannee 2023, doublonne le recueil 03 : verifier laquelle prime"
+    },
+    "code-du-statut-personnel": {
+      "statut": "inconnu",
+      "note": "Version scannee 2023 : verifier face aux recueils 2026"
+    },
+    "international-accord-fao-2009-mesures-etat-du-port": {
+      "statut": "en_vigueur",
+      "note": "Accord FAO en vigueur depuis 2016. La Mauritanie y est partie ; verifier son incorporation en droit interne avant d'en tirer une obligation directement invocable."
+    },
+    "international-tidm-2015-avis-consultatif-csrp-peche-inn": {
+      "statut": "en_vigueur",
+      "note": "Avis consultatif, non contraignant. Fait autorite d'interpretation, ne cree pas d'obligation par lui-meme."
+    },
+    "international-iccat-textes-fondamentaux": {
+      "statut": "en_vigueur",
+      "note": "Convention de Rio de 1966 et textes fondamentaux, tels que publies par l'ICCAT. Verifier la date d'edition du recueil."
+    }
+  }
+}
