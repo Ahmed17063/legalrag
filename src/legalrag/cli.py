@@ -19,6 +19,7 @@ from .generation import GenerationError
 from .qdrant_store import QdrantStoreError
 from .logging_setup import setup_logging
 from .pipeline import push_to_qdrant, run
+from .veille import garder_eveille
 
 logger = logging.getLogger(__name__)
 
@@ -131,9 +132,12 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "index":
-            report = run(
-                settings, limit=args.limit, dry_run=args.dry_run, prune=args.prune
-            )
+            # Ce job dure de quelques minutes a plusieurs heures : une mise
+            # en veille le suspendrait, et le diagnostic serait trompeur.
+            with garder_eveille("l'indexation"):
+                report = run(
+                    settings, limit=args.limit, dry_run=args.dry_run, prune=args.prune
+                )
             print(report.summary(), file=sys.stderr)
 
             if args.compact and not args.dry_run:
@@ -197,7 +201,8 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         elif args.command == "qdrant":
-            rapport = push_to_qdrant(settings, recreate=args.recreate, prune=args.prune)
+            with garder_eveille("le chargement dans Qdrant"):
+                rapport = push_to_qdrant(settings, recreate=args.recreate, prune=args.prune)
             print(rapport.summary(), file=sys.stderr)
 
         elif args.command == "compact":

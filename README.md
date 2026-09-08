@@ -476,6 +476,31 @@ Les avertissements du moteur — réponse non étayée, citation d'un extrait
 inexistant — sont affichés en rouge dans la page, au même titre que dans le
 terminal.
 
+## 9 quater. Mise en veille
+
+Les commandes `index` et `qdrant` **suspendent la veille système** le temps
+de leur exécution, via `SetThreadExecutionState`. La demande est volatile :
+elle disparaît à la fin du processus, même tué, et ne modifie rien
+durablement dans les réglages — contrairement à `powercfg`.
+
+C'est une correction née d'un incident réel : un job d'indexation a paru
+bloqué pendant treize heures avant de reprendre en quelques secondes. La
+machine dormait, et rien dans les journaux ne distinguait une veille d'un
+blocage.
+
+Pour désactiver la veille de façon durable malgré tout :
+
+```powershell
+powercfg /change standby-timeout-ac 0    # sur secteur
+powercfg /change standby-timeout-dc 0    # sur batterie
+```
+
+Vérifier qu'une demande est active, depuis un terminal **administrateur** :
+
+```powershell
+powercfg /requests
+```
+
 ## 10. Skills Claude Code
 
 Deux skills du dépôt documentent la mise en place des accès, avec les
