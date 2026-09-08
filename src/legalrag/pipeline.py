@@ -17,7 +17,7 @@ from pathlib import Path
 
 from .boilerplate import clean_pages
 from .chunking import Chunk, PageText, chunk_pages
-from .config import Settings
+from .config import Settings, verifier_acces_corpus
 from .drive import DriveCorpus
 from .local_corpus import LocalCorpus
 from .embeddings import VoyageEmbedder
@@ -84,6 +84,10 @@ def estimate_cost(tokens: int, model: str) -> str:
 
 def collect_pages(settings: Settings, report: RunReport, limit: int | None = None) -> list[PageText]:
     """Liste, filtre et telecharge les pages du corpus."""
+    # C'est ici, et pas au chargement de la configuration, que les acces
+    # a la source doivent etre valides.
+    verifier_acces_corpus(settings)
+
     if settings.corpus_source == "local":
         corpus = LocalCorpus(
             corpus_dir=settings.local_corpus_dir,

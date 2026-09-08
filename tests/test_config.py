@@ -7,6 +7,8 @@ echec d'authentification difficile a diagnostiquer.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from legalrag.config import (
@@ -48,3 +50,63 @@ def test_override_sans_slash_final():
 
 def test_override_vide_ignore():
     assert resolve_base_url("pa-abc", "") == VOYAGE_LEGACY_URL
+
+
+# ---------------------------------------------------------------------------
+# Les acces au corpus ne sont exiges qu'a l'indexation
+# ---------------------------------------------------------------------------
+
+
+def test_configuration_chargee_sans_acces_drive(monkeypatch, tmp_path):
+    """Servir le chatbot ne demande ni Drive ni corpus local.
+
+    Les exiger au chargement faisait echouer `serve`, `search` et `ask`,
+    qui interrogent Qdrant par le reseau — et empechait le conteneur
+    Docker de demarrer, faute de fichier de credentials.
+    """
+    from legalrag.config import load_settings
+
+    for nom, valeur in {
+        "VOYAGE_API_KEY": "cle",
+        "GOOGLE_APPLICATION_CREDENTIALS": "",
+        "DRIVE_FOLDER_ID": "",
+        "CORPUS_SOURCE": "drive",
+    }.items():
+        monkeypatch.setenv(nom, valeur)
+
+    settings = load_settings(tmp_path / "absent.env")
+    assert settings.corpus_source == "drive"
+
+
+def test_indexation_refusee_sans_acces_drive(settings):
+    """La verification a lieu au moment de construire le corpus."""
+    from dataclasses import replace
+
+    from legalrag.config import ConfigError, verifier_acces_corpus
+
+    sans_drive = replace(settings, drive_folder_id="", google_credentials_file=Path())
+    with pytest.raises(ConfigError, match="DRIVE_FOLDER_ID"):
+        verifier_acces_corpus(sans_drive)
+
+
+def test_indexation_refusee_si_credentials_introuvables(settings, tmp_path):
+    from dataclasses import replace
+
+    from legalrag.config import ConfigError, verifier_acces_corpus
+
+    mauvais = replace(settings, google_credentials_file=tmp_path / "rien.json")
+    with pytest.raises(ConfigError, match="introuvable"):
+        verifier_acces_corpus(mauvais)
+
+
+def test_corpus_local_verifie_le_repertoire(settings, tmp_path):
+    from dataclasses import replace
+
+    from legalrag.config import ConfigError, verifier_acces_corpus
+
+    absent = replace(settings, corpus_source="local", local_corpus_dir=tmp_path / "rien")
+    with pytest.raises(ConfigError, match="Repertoire de corpus introuvable"):
+        verifier_acces_corpus(absent)
+
+    present = replace(settings, corpus_source="local", local_corpus_dir=tmp_path)
+    verifier_acces_corpus(present)  # ne doit pas lever

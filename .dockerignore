@@ -1,0 +1,43 @@
+# Ce qui ne doit jamais entrer dans l'image.
+#
+# Le contexte de build est envoye au demon Docker avant toute instruction :
+# sans ce fichier, les 210 Mo de data/ et les PDF sources partiraient a
+# chaque construction, meme s'ils n'etaient jamais copies.
+
+# --- Secrets. Rien de tout cela ne doit se retrouver dans une couche ------
+.env
+.env.*
+!.env.example
+secrets/
+*service-account*.json
+*credentials*.json
+
+# --- Donnees generees. Le serveur web lit Qdrant par le reseau : il n'a
+#     besoin ni de l'index local, ni du corpus, ni du cache. -------------
+data/
+!data/statuts.json
+Documents_juridiques/
+logs/
+rapport_*.txt
+
+# --- Environnement local. Les dependances sont reinstallees dans l'image
+#     depuis uv.lock ; copier un .venv Windows la casserait. -------------
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# --- Historique et outillage, sans usage a l'execution -------------------
+.git/
+.github/
+.gitlab-ci.yml
+.vscode/
+.claude/
+old/
+tests/
+docs/
+*.md
+!README.md

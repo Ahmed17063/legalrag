@@ -144,14 +144,13 @@ def load_settings(env_file: Path | None = None) -> Settings:
     if source not in {"drive", "local"}:
         raise ConfigError(f"CORPUS_SOURCE doit valoir 'drive' ou 'local', recu {source!r}")
 
-    # Les credentials Google n'ont de sens que si le corpus vient de Drive.
+    # Les acces Drive ne sont requis qu'a l'indexation. Les exiger ici
+    # ferait echouer `serve`, `search` et `ask`, qui interrogent Qdrant par
+    # le reseau et ne touchent jamais a Drive — c'est ce qui empechait le
+    # conteneur de demarrer. La verification est reportee au moment ou le
+    # corpus est reellement construit (voir pipeline.collect_pages).
     folder_id = _env("DRIVE_FOLDER_ID") or ""
     creds_raw = _env("GOOGLE_APPLICATION_CREDENTIALS") or ""
-    if source == "drive":
-        if not folder_id:
-            missing.append("DRIVE_FOLDER_ID")
-        if not creds_raw:
-            missing.append("GOOGLE_APPLICATION_CREDENTIALS")
 
     if missing:
         raise ConfigError(
@@ -160,12 +159,9 @@ def load_settings(env_file: Path | None = None) -> Settings:
             + ".\nCopiez .env.example en .env et renseignez-les."
         )
 
-    credentials_file = Path(creds_raw).expanduser()
-    if not credentials_file.is_file():
-        raise ConfigError(
-            f"Fichier de credentials Google introuvable : {credentials_file}\n"
-            "Voir la section 'Credentials Google Drive' du README."
-        )
+    # L'existence du fichier n'est pas verifiee ici : voir
+    # `verifier_acces_corpus`, appelee au moment de construire le corpus.
+    credentials_file = Path(creds_raw).expanduser() if creds_raw else Path()
 
     model = _env("EMBEDDING_MODEL", "voyage-context-4")
     known = KNOWN_MODELS.get(model)
@@ -241,6 +237,47 @@ def load_settings(env_file: Path | None = None) -> Settings:
         generation_model=_env("GENERATION_MODEL", "openai/gpt-oss-120b"),
         generation_max_tokens=_env_int("GENERATION_MAX_TOKENS", 2048),
     )
+
+
+def verifier_acces_corpus(settings: Settings) -> None:
+    """Verifie que la source du corpus est utilisable.
+
+    Appelee au moment de construire le corpus, et non au chargement de la
+    configuration : servir le chatbot ne demande ni Drive ni corpus local,
+    et exiger ces reglages pour toute commande empechait le conteneur de
+    demarrer.
+
+    Raises:
+        ConfigError: reglage manquant ou fichier introuvable.
+    """
+    if settings.corpus_source == "local":
+        if not settings.local_corpus_dir.is_dir():
+            raise ConfigError(
+                f"Repertoire de corpus introuvable : {settings.local_corpus_dir}\n"
+                "Verifiez LOCAL_CORPUS_DIR, ou lancez d'abord l'ingestion des PDF."
+            )
+        return
+
+    manquants = [
+        nom
+        for nom, valeur in (
+            ("DRIVE_FOLDER_ID", settings.drive_folder_id),
+            ("GOOGLE_APPLICATION_CREDENTIALS", str(settings.google_credentials_file)),
+        )
+        if not valeur or valeur == "."
+    ]
+    if manquants:
+        raise ConfigError(
+            "Indexation depuis Drive : variables manquantes : "
+            + ", ".join(manquants)
+            + ".\nVoir docs/configuration-google-drive.md."
+        )
+
+    if not settings.google_credentials_file.is_file():
+        raise ConfigError(
+            f"Fichier de credentials Google introuvable : {settings.google_credentials_file}\n"
+            "Voir la section 'Credentials Google Drive' du README."
+        )
 
 
 def _load_dotenv(env_file: Path | None) -> None:

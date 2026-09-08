@@ -1,0 +1,53 @@
+# Lancement du chatbot en conteneur.
+#
+#   docker compose up --build
+#
+# Les secrets viennent de .env, jamais de l'image : VOYAGE_API_KEY,
+# GROQ_API_KEY, QDRANT_URL et QDRANT_API_KEY y sont lus a l'execution.
+
+services:
+  chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: legalrag:latest
+    container_name: legalrag-chatbot
+
+    # Le fichier n'entre pas dans l'image (voir .dockerignore) : il est lu
+    # au demarrage du conteneur.
+    env_file:
+      - .env
+
+    environment:
+      # Le corpus vit dans Qdrant Cloud : le conteneur n'a ni index local
+      # ni acces Drive, et ces variables ne doivent pas etre requises.
+      CORPUS_SOURCE: drive
+      STATUTS_FILE: /app/data/statuts.json
+
+    ports:
+      - "8000:8000"
+
+    # Le registre des statuts monte en lecture seule : le modifier ne
+    # demande alors ni reconstruction ni redemarrage de l'image, seulement
+    # un redemarrage du conteneur.
+    volumes:
+      - ./data/statuts.json:/app/data/statuts.json:ro
+
+    restart: unless-stopped
+
+    # Le conteneur n'ecrit rien hors de /tmp : le systeme de fichiers peut
+    # rester en lecture seule.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://127.0.0.1:8000/api/health | grep -q '"pret": *true'
+      interval: 30s
+      timeout: 10s
+      start_period: 45s
+      retries: 3

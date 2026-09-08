@@ -501,6 +501,58 @@ Vérifier qu'une demande est active, depuis un terminal **administrateur** :
 powercfg /requests
 ```
 
+## 9 quinquies. Docker
+
+L'image sert **l'interface web**, pas l'indexation. Le serveur interroge
+Qdrant Cloud, Voyage et Groq par le réseau : il n'a besoin ni de l'index
+Parquet, ni du corpus, ni du cache — 210 Mo qui restent dehors.
+
+```bash
+docker compose up --build
+```
+
+Puis <http://localhost:8000>. Ou sans compose :
+
+```bash
+docker build -t legalrag .
+docker run --rm -p 8000:8000 --env-file .env legalrag
+```
+
+### Ce qui n'entre pas dans l'image
+
+**Aucun secret.** `VOYAGE_API_KEY`, `GROQ_API_KEY`, `QDRANT_URL` et
+`QDRANT_API_KEY` sont fournis à l'exécution par `--env-file`. Un secret
+copié dans une couche y reste, même supprimé dans une couche suivante.
+
+**Aucune donnée générée.** `.dockerignore` exclut `data/`, les PDF sources
+et les journaux. Seul `data/statuts.json` est embarqué — il est petit et
+porte la qualification juridique des textes. Le compose le monte en lecture
+seule, ce qui permet de le modifier sans reconstruire.
+
+### Choix de conception
+
+**Construction en deux étapes.** Les dépendances sont installées avec uv
+depuis `uv.lock`, puis seul le `.venv` passe dans l'image finale : ni uv ni
+les outils de compilation n'y figurent. Les manifestes sont copiés avant le
+code, si bien qu'une modification de `src/` ne réinstalle pas les
+dépendances.
+
+**Compte sans privilège.** Le service tourne sous l'utilisateur `legalrag`,
+avec un système de fichiers en lecture seule et `no-new-privileges`.
+
+**Écoute sur `0.0.0.0`.** Le défaut de la commande, `127.0.0.1`, ne serait
+joignable que depuis l'intérieur du conteneur.
+
+**Sonde de santé** sur `/api/health`, qui vérifie la connexion à Qdrant.
+
+### Une limite connue
+
+L'image embarque toutes les dépendances du projet, y compris celles que le
+serveur web n'utilise pas — `pyarrow`, les bibliothèques Google, `pypdf`,
+`voyageai`. Les séparer en groupes optionnels allégerait sensiblement
+l'image, au prix d'une installation locale en deux temps. Ça n'a pas été
+fait : la simplicité du `uv sync` unique a été préférée.
+
 ## 10. Skills Claude Code
 
 Deux skills du dépôt documentent la mise en place des accès, avec les
