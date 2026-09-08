@@ -32,6 +32,7 @@ from typing import Any
 from qdrant_client import QdrantClient, models
 
 from .config import Settings
+from .statuts import FicheStatut, RegistreStatuts, Statut, mentionne_une_abrogation
 from .voyage_http import VoyageTransport
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,11 @@ class Passage:
     article: str | None = None
     vector_score: float = 0.0
     rerank_score: float | None = None
+    # Resolu a la recherche depuis le registre, jamais depuis l'index :
+    # une abrogation ne doit pas obliger a replonger le corpus.
+    statut: Statut = Statut.INCONNU
+    mention_statut: str = ""
+    evoque_une_abrogation: bool = False
 
     @property
     def score(self) -> float:
@@ -109,7 +115,7 @@ class Passage:
             else f"p. {self.page_start}-{self.page_end}"
         )
         article = f", art. {self.article}" if self.article else ""
-        return f"{self.document}{article} ({pages})"
+        return f"{self.document}{article} ({pages}){self.mention_statut}"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -120,6 +126,9 @@ class Passage:
             "pages": list(self.pages),
             "timestamp": self.timestamp,
             "chunk_id": self.chunk_id,
+            "statut": self.statut.value,
+            "mention_statut": self.mention_statut,
+            "evoque_une_abrogation": self.evoque_une_abrogation,
             "score": round(self.score, 4),
             "vector_score": round(self.vector_score, 4),
             "rerank_score": None if self.rerank_score is None else round(self.rerank_score, 4),
@@ -222,6 +231,7 @@ class Retriever:
             max_tokens_per_minute=settings.max_tokens_per_minute,
         )
         self._client = _make_client(settings)
+        self._registre = RegistreStatuts.charger(settings.statuts_file)
 
     # -- cycle de vie ------------------------------------------------------
 
@@ -393,7 +403,7 @@ class Retriever:
         ).points
         result.chunks_examined = len(hits)
 
-        passages = _explode(hits)
+        passages = _explode(hits, self._registre)
         result.passages_examined = len(passages)
         logger.info(
             "%d chunk(s) -> %d passage(s) au niveau de l'article", len(hits), len(passages)
@@ -413,11 +423,18 @@ class Retriever:
         return result
 
 
-def _explode(hits: list[Any]) -> list[Passage]:
-    """Transforme les chunks retournes par Qdrant en passages par article."""
+def _explode(hits: list[Any], registre: RegistreStatuts | None = None) -> list[Passage]:
+    """Transforme les chunks retournes par Qdrant en passages par article.
+
+    Le statut est appose ici, a partir du registre : c'est le dernier
+    moment ou il peut l'etre sans figer une decision juridique dans les
+    vecteurs.
+    """
+    registre = registre or RegistreStatuts()
     passages: list[Passage] = []
     for hit in hits:
         charge = hit.payload
+        fiche = registre.fiche(charge["document_id"])
         for numero, texte in split_articles(charge["text"]):
             passages.append(
                 Passage(
@@ -431,6 +448,9 @@ def _explode(hits: list[Any]) -> list[Passage]:
                     chunk_id=charge["chunk_id"],
                     article=numero,
                     vector_score=float(hit.score),
+                    statut=fiche.statut,
+                    mention_statut=fiche.mention(),
+                    evoque_une_abrogation=mentionne_une_abrogation(texte),
                 )
             )
     return passages
