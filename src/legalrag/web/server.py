@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 from ..config import ConfigError, Settings, load_settings
 from ..generation import GenerationError, Generator
 from ..logging_setup import setup_logging
+from ..reformulation import construire as construire_reformulateur
 from ..retrieval import Retriever
 
 logger = logging.getLogger(__name__)
@@ -74,8 +75,19 @@ class Etat:
             logger.error("Configuration invalide : %s", exc)
             return
 
+        # Le generateur precede le retriever : il sert aussi a reformuler la
+        # question avant la recherche. Son absence n'empeche rien — ni la
+        # recherche, ni la reformulation, qui se desactive alors d'elle-meme.
         try:
-            self.retriever = Retriever(self.settings)
+            self.generator = Generator(self.settings)
+        except GenerationError as exc:
+            # La recherche reste utilisable sans generation : on n'echoue pas.
+            logger.warning("Generation indisponible : %s", exc)
+
+        try:
+            self.retriever = Retriever(
+                self.settings, construire_reformulateur(self.settings, self.generator)
+            )
             self.documents = self.retriever.documents()
             logger.info(
                 "%d document(s) dans la collection %r",
@@ -86,12 +98,6 @@ class Etat:
             self.erreur = f"Connexion a Qdrant impossible : {exc}"
             logger.error(self.erreur)
             return
-
-        try:
-            self.generator = Generator(self.settings)
-        except GenerationError as exc:
-            # La recherche reste utilisable sans generation : on n'echoue pas.
-            logger.warning("Generation indisponible : %s", exc)
 
     def arreter(self) -> None:
         if self.retriever is not None:
@@ -200,6 +206,10 @@ def ask(payload: Question) -> JSONResponse:
 
     donnees = reponse.as_dict()
     donnees["duree"] = round(time.monotonic() - debut, 1)
+    # Rendue au navigateur : une recherche doit rester explicable, et
+    # comprendre pourquoi tel article est remonte commence par savoir ce
+    # qui a reellement ete cherche.
+    donnees["query_reformulee"] = resultat.query_reformulee
     donnees["chunks_examined"] = resultat.chunks_examined
     donnees["passages_examined"] = resultat.passages_examined
     donnees["reranked"] = resultat.reranked

@@ -602,6 +602,15 @@ function ajouterReponse(tour, data) {
     bloc.appendChild(s);
   }
 
+  // Ce qui a réellement été cherché, quand ce n'est pas la question posée.
+  // Comprendre pourquoi tel article remonte commence par là.
+  if (data.query_reformulee) {
+    const q = document.createElement("div");
+    q.className = "meta";
+    q.textContent = "Recherché : " + data.query_reformulee;
+    bloc.appendChild(q);
+  }
+
   const meta = document.createElement("div");
   meta.className = "meta";
   const bouts = [`${data.duree} s`];

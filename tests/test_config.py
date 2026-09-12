@@ -166,14 +166,18 @@ def test_effort_inconnu_refuse(monkeypatch, tmp_path):
         load_settings(tmp_path / "absent.env")
 
 
-def test_temperature_par_defaut(monkeypatch, tmp_path):
-    """Bridee, mais pas nulle."""
+def test_temperatures_par_defaut(monkeypatch, tmp_path):
+    """Deux etapes, deux besoins opposes : fidelite puis variete lexicale."""
     from legalrag.config import load_settings
 
     environnement_minimal(monkeypatch)
     monkeypatch.delenv("GENERATION_TEMPERATURE", raising=False)
+    monkeypatch.delenv("REFORMULATION_TEMPERATURE", raising=False)
 
-    assert load_settings(tmp_path / "absent.env").generation_temperature == 0.3
+    settings = load_settings(tmp_path / "absent.env")
+    assert settings.generation_temperature == 0.1
+    assert settings.reformulation_temperature == 0.4
+    assert settings.generation_temperature < settings.reformulation_temperature
 
 
 def test_temperature_lue_depuis_l_environnement(monkeypatch, tmp_path):

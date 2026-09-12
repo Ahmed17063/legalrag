@@ -447,12 +447,68 @@ uv run legalrag search "ta question" --top-k 8 --top-n 3
 uv run legalrag ask "ta question" --top-k 8 --top-n 3
 uv run legalrag ask "..." --show-passages   # + le texte intégral cité
 uv run legalrag ask "..." --modele claude   # rédigée par Claude plutôt que Groq
+uv run legalrag ask "..." --no-reformulation  # chercher la question telle quelle
 ```
 
-La recherche procède en trois temps : vectoriel dans Qdrant, découpage de
-chaque chunk sur ses en-têtes d'article, puis reranking des passages face à
-la question. Sans ce découpage, un chunk de 2554 caractères contenant
-6,3 articles en moyenne noierait l'article pertinent.
+La recherche procède en quatre temps : reformulation de la question,
+vectoriel dans Qdrant, découpage de chaque chunk sur ses en-têtes d'article,
+puis reranking des passages face à la question. Sans ce découpage, un chunk
+de 2554 caractères contenant 6,3 articles en moyenne noierait l'article
+pertinent.
+
+### La reformulation de requête
+
+L'utilisateur écrit « est-ce qu'on peut virer une femme enceinte ? », le code
+écrit « la rupture du contrat de travail ne peut être notifiée pendant les
+périodes de suspension liées à la maternité ». Les deux parlent de la même
+chose, mais le vocabulaire ne se recouvre pas — et c'est le vocabulaire que
+compare un modèle d'embedding. La question est donc réécrite dans la langue
+du corpus avant d'être envoyée chercher.
+
+Trois choix, tous dictés par des contraintes réelles du projet :
+
+- **Une seule reformulation, pas N variantes.** La technique courante en
+  produit plusieurs et cherche avec chacune. Impossible ici : le compte
+  Voyage est plafonné à deux requêtes par minute, et une recherche en
+  consomme déjà deux (un embedding, un reranking). Une variante de plus, et
+  chaque question attendrait une minute supplémentaire. La reformulation
+  *conserve* donc les termes de l'utilisateur au lieu de les remplacer.
+- **Le vectoriel part de la reformulation, le reranking de la question
+  d'origine.** Le premier cherche du vocabulaire, le second juge la
+  pertinence : lui donner la question telle qu'elle a été posée le garde
+  aligné sur l'intention réelle. C'est aussi ce qui empêche une reformulation
+  malheureuse de dégrader le classement final.
+- **L'échec est sans conséquence.** Modèle indisponible, réponse vide,
+  réponse aberrante : la question d'origine part telle quelle. Une
+  reformulation ratée ne doit jamais empêcher de répondre.
+
+Coût : un appel au modèle de génération (1 à 3 s sur Groq), **aucun appel
+Voyage supplémentaire**.
+
+**Effet mesuré** sur trois questions en langage courant, au niveau du vivier
+de 25 chunks ramenés par le vectoriel :
+
+| Question | Chunks renouvelés | Documents couverts |
+|---|---|---|
+| « virer une femme enceinte » | 8 / 25 | 1 → 4 recueils |
+| « si je vole quelque chose » | 12 / 25 | 1 → 1 |
+| « peine pour corruption » | 8 / 25 | 1 → 2 recueils |
+
+La reformulation renouvelle donc un tiers à la moitié du vivier, et élargit
+la couverture : pour la question sur la grossesse, elle fait remonter le
+recueil sécurité sociale et la fonction publique, absents sans elle.
+
+> **Que cela améliore les réponses n'est pas démontré.** Le vivier change,
+> la couverture s'élargit, et le reranking protège du pire — mais mesurer un
+> gain de pertinence demanderait le jeu de questions-réponses de référence
+> qui n'existe toujours pas (voir *Ce qui n'est pas fait*). `--no-reformulation`
+> et `REFORMULATION_ENABLED=false` permettent de comparer sur vos propres
+> questions.
+
+Piège rencontré : `openai/gpt-oss-120b` est un **modèle à raisonnement**. Avec
+`REFORMULATION_MAX_TOKENS=200`, 198 tokens partaient en raisonnement et la
+reformulation revenait vide, sans erreur. Le plafond est donc à 800, et un
+avertissement explicite nomme la cause si le cas se reproduit.
 
 ### Les garde-fous de la génération
 
@@ -462,9 +518,10 @@ toutes vérifiables :
 
 - **passages numérotés, citation obligatoire** : chaque affirmation doit
   porter son `[n]` ;
-- **échantillonnage bridé** : `GENERATION_TEMPERATURE` vaut 0,3 — assez bas
-  pour rester fidèle au texte, assez haut pour éviter les formulations figées
-  d'une température nulle (voir la réserve sur Claude ci-dessous) ;
+- **échantillonnage bridé** : `GENERATION_TEMPERATURE` vaut 0,1 pour la
+  rédaction, où la fidélité au texte prime. La reformulation de requête monte
+  à 0,4 : elle cherche justement de la variété lexicale, l'inverse du besoin
+  de la rédaction (voir la réserve sur Claude ci-dessous) ;
 - **vérification après coup** : les numéros cités sont contrôlés. Hors plage,
   ils sont signalés ; une réponse sans citation est marquée non étayée.
 
@@ -501,8 +558,9 @@ d'implémentation :
 
 - **Aucune température n'est transmise à Claude.** Sonnet 5 rejette en 400
   tout paramètre d'échantillonnage dont la valeur n'est pas la sienne par
-  défaut : `0,3` échouerait exactement comme `0`. `GENERATION_TEMPERATURE`
-  ne vaut donc que pour Groq, et le garde-fou n° 2 ne s'applique qu'à lui.
+  défaut : `0,1` échouerait exactement comme `0`. `GENERATION_TEMPERATURE`
+  et `REFORMULATION_TEMPERATURE` ne valent donc que pour Groq, et le
+  garde-fou n° 2 ne s'applique qu'à lui.
 - **Le raisonnement adaptatif est actif par défaut** et `ANTHROPIC_MAX_TOKENS`
   borne le raisonnement *plus* la réponse — d'où 4096 par défaut, contre 2048
   pour Groq. Si la limite est malgré tout atteinte, la réponse est marquée

@@ -134,10 +134,25 @@ class Settings:
     generation_model: str
     generation_max_tokens: int
 
-    # Temperature d'echantillonnage. Ne s'applique qu'a Groq : Claude
-    # Sonnet 5 rejette en 400 toute valeur non par defaut, quelle qu'elle
-    # soit. Voir generation.py.
-    generation_temperature: float = 0.3
+    # Temperature de redaction : basse, on restitue du droit. Ne s'applique
+    # qu'a Groq — Claude Sonnet 5 rejette en 400 toute valeur non par
+    # defaut, quelle qu'elle soit. Voir generation.py.
+    generation_temperature: float = 0.1
+
+    # Reformulation de la question avant la recherche vectorielle. La
+    # temperature y est plus haute : on cherche de la variete lexicale,
+    # l'inverse du besoin de la redaction. Voir reformulation.py.
+    reformulation_enabled: bool = True
+    reformulation_temperature: float = 0.4
+    # Large pour une phrase, et c'est voulu : les modeles a raisonnement
+    # (gpt-oss chez Groq) depensent ce budget en raisonnement AVANT d'ecrire.
+    # A 200, le raisonnement consommait tout et la reformulation revenait
+    # vide. Mesure sur gpt-oss-120b : 145 a 284 tokens de raisonnement, 360
+    # au total dans le pire cas.
+    reformulation_max_tokens: int = 800
+    # Modele charge de la reformulation. Vide = le defaut de generation.
+    # Une tache mecanique et courte : le modele le plus rapide suffit.
+    reformulation_model: str = ""
 
     # Deuxieme fournisseur de generation. Les champs portent une valeur par
     # defaut : les sites de construction existants (tests compris) n'ont pas
@@ -236,12 +251,17 @@ def load_settings(env_file: Path | None = None) -> Settings:
             f"CHUNK_TOKENS ({chunk_tokens}) depasse le contexte de {model!r} ({max_tokens})"
         )
 
-    temperature = _env_float("GENERATION_TEMPERATURE", 0.3)
-    if not 0.0 <= temperature <= 2.0:
-        raise ConfigError(
-            f"GENERATION_TEMPERATURE={temperature} hors bornes : l'API n'accepte "
-            "qu'une valeur entre 0 et 2."
-        )
+    temperature = _env_float("GENERATION_TEMPERATURE", 0.1)
+    temperature_reformulation = _env_float("REFORMULATION_TEMPERATURE", 0.4)
+    for nom, valeur in (
+        ("GENERATION_TEMPERATURE", temperature),
+        ("REFORMULATION_TEMPERATURE", temperature_reformulation),
+    ):
+        if not 0.0 <= valeur <= 2.0:
+            raise ConfigError(
+                f"{nom}={valeur} hors bornes : l'API n'accepte qu'une valeur "
+                "entre 0 et 2."
+            )
 
     # Niveau d'effort de raisonnement d'Anthropic. Une valeur inconnue est
     # refusee par l'API : mieux vaut le dire ici que perdre l'appel.
@@ -285,6 +305,10 @@ def load_settings(env_file: Path | None = None) -> Settings:
         generation_model=_env("GENERATION_MODEL", "openai/gpt-oss-120b"),
         generation_max_tokens=_env_int("GENERATION_MAX_TOKENS", 2048),
         generation_temperature=temperature,
+        reformulation_enabled=_env_bool("REFORMULATION_ENABLED", True),
+        reformulation_temperature=temperature_reformulation,
+        reformulation_max_tokens=_env_int("REFORMULATION_MAX_TOKENS", 800),
+        reformulation_model=_env("REFORMULATION_MODEL", "") or "",
         anthropic_api_key=_env("ANTHROPIC_API_KEY"),
         anthropic_model=_env("ANTHROPIC_MODEL", "claude-sonnet-5"),
         anthropic_max_tokens=_env_int("ANTHROPIC_MAX_TOKENS", 4096),

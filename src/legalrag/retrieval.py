@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -146,10 +147,14 @@ class SearchResult:
     passages_examined: int = 0
     reranked: bool = False
     tokens_billed: int = 0
+    # Requete reellement envoyee au moteur vectoriel, si elle differe de la
+    # question. Rendue a l'appelant : une recherche doit rester explicable.
+    query_reformulee: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "query": self.query,
+            "query_reformulee": self.query_reformulee,
             "reranked": self.reranked,
             "chunks_examined": self.chunks_examined,
             "passages_examined": self.passages_examined,
@@ -222,7 +227,15 @@ def split_articles(text: str, min_chars: int = MIN_BODY_CHARS) -> list[tuple[str
 class Retriever:
     """Recherche dans la collection Qdrant, avec reranking optionnel."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        reformulateur: Callable[[str], str] | None = None,
+    ) -> None:
+        # Le reformulateur est *injecte* plutot que construit ici : il
+        # s'appuie sur `generation`, qui importe deja ce module. Le
+        # construire ici creerait un cycle d'imports.
+        self._reformulateur = reformulateur
         self._settings = settings
         self._transport = VoyageTransport(
             api_key=settings.voyage_api_key,
@@ -373,15 +386,27 @@ class Retriever:
         top_n: int | None = None,
         document_id: str | None = None,
         rerank: bool | None = None,
+        reformuler: bool | None = None,
     ) -> SearchResult:
         """Cherche les passages qui repondent a la question."""
         top_k = top_k or self._settings.retrieval_top_k
         top_n = top_n or self._settings.retrieval_top_n
         rerank = self._settings.rerank_enabled if rerank is None else rerank
+        if reformuler is None:
+            reformuler = self._settings.reformulation_enabled
 
         result = SearchResult(query=query)
 
-        vecteur, tokens = self.embed_query(query)
+        # La recherche vectorielle part de la reformulation — elle cherche du
+        # vocabulaire ; le reranking, lui, gardera la question d'origine.
+        requete = query
+        if reformuler and self._reformulateur is not None:
+            reecrite = self._reformulateur(query)
+            if reecrite and reecrite != query:
+                requete = reecrite
+                result.query_reformulee = reecrite
+
+        vecteur, tokens = self.embed_query(requete)
         result.tokens_billed += tokens
 
         filtre = None

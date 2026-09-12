@@ -75,6 +75,11 @@ def build_parser() -> argparse.ArgumentParser:
     search_cmd.add_argument("--top-n", type=int, default=None, help="Passages renvoyes")
     search_cmd.add_argument("--document", default=None, help="Restreindre a un document_id")
     search_cmd.add_argument("--no-rerank", action="store_true", help="Sauter le reranking")
+    search_cmd.add_argument(
+        "--no-reformulation",
+        action="store_true",
+        help="Chercher la question telle quelle, sans la reecrire",
+    )
     search_cmd.add_argument("--json", action="store_true", help="Sortie JSON")
 
     ask_cmd = sub.add_parser("ask", help="Poser une question et obtenir une reponse redigee")
@@ -83,6 +88,11 @@ def build_parser() -> argparse.ArgumentParser:
     ask_cmd.add_argument("--top-n", type=int, default=None, help="Passages soumis au modele")
     ask_cmd.add_argument("--document", default=None, help="Restreindre a un document_id")
     ask_cmd.add_argument("--no-rerank", action="store_true", help="Sauter le reranking")
+    ask_cmd.add_argument(
+        "--no-reformulation",
+        action="store_true",
+        help="Chercher la question telle quelle, sans la reecrire",
+    )
     ask_cmd.add_argument("--json", action="store_true", help="Sortie JSON")
     ask_cmd.add_argument(
         "--modele",
@@ -154,31 +164,39 @@ def main(argv: list[str] | None = None) -> int:
                 _store(settings).compact()
 
         elif args.command == "search":
+            from .reformulation import construire
             from .retrieval import Retriever
 
-            with Retriever(settings) as retriever:
+            with Retriever(settings, construire(settings)) as retriever:
                 resultat = retriever.search(
                     args.question,
                     top_k=args.top_k,
                     top_n=args.top_n,
                     document_id=args.document,
                     rerank=not args.no_rerank,
+                    reformuler=not args.no_reformulation,
                 )
             _afficher_recherche(resultat, en_json=args.json)
 
         elif args.command == "ask":
             from .generation import Generator
+            from .reformulation import construire
             from .retrieval import Retriever
 
-            with Retriever(settings) as retriever:
+            # Le generateur est partage entre la reformulation et la
+            # redaction : une seule session HTTP, un seul client Anthropic.
+            generateur = Generator(settings)
+
+            with Retriever(settings, construire(settings, generateur)) as retriever:
                 resultat = retriever.search(
                     args.question,
                     top_k=args.top_k,
                     top_n=args.top_n,
                     document_id=args.document,
                     rerank=not args.no_rerank,
+                    reformuler=not args.no_reformulation,
                 )
-            reponse = Generator(settings).answer(
+            reponse = generateur.answer(
                 args.question, resultat.passages, modele=args.modele
             )
             _afficher_reponse(reponse, en_json=args.json, extraits=args.show_passages)
@@ -260,7 +278,10 @@ def _afficher_recherche(resultat, en_json: bool = False) -> None:
         f"{'reclasses' if resultat.reranked else 'ordre vectoriel'} | "
         f"{resultat.tokens_billed} tokens"
     )
-    print(f"\n{resultat.query}\n{entete}\n" + "-" * 78)
+    print(f"\n{resultat.query}")
+    if resultat.query_reformulee:
+        print(f"  cherche : {resultat.query_reformulee}")
+    print(f"{entete}\n" + "-" * 78)
 
     for rang, p in enumerate(resultat.passages, 1):
         texte = " ".join(p.text.split())

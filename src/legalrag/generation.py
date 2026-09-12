@@ -11,10 +11,10 @@ plausible et fausse. Trois garde-fous, tous verifiables :
 1. **Passages numerotes, citation obligatoire.** Le modele doit rattacher
    chaque affirmation a un numero de passage.
 2. **Echantillonnage bride.** On ne cherche pas de la variete quand on
-   restitue du droit. `GENERATION_TEMPERATURE` vaut 0,3 par defaut : assez
-   bas pour rester fidele au texte, assez haut pour eviter les boucles et
-   les formulations figees que produit parfois une temperature nulle. Voir
-   la reserve sur Claude plus bas.
+   restitue du droit : `GENERATION_TEMPERATURE` vaut 0,1 par defaut. La
+   reformulation de requete, elle, monte a 0,4 — elle cherche justement de
+   la variete lexicale (voir `reformulation.py`). Voir aussi la reserve sur
+   Claude plus bas.
 3. **Verification apres coup.** Les numeros cites sont controles : hors
    plage, ils sont signales. Une reponse sans aucune citation est marquee
    comme non etayee, et l'appelant peut la refuser.
@@ -36,7 +36,7 @@ Le module en expose deux, choisis par l'appelant appel par appel :
 
 Une reserve sur le garde-fou n° 2 : Claude Sonnet 5 **refuse** tout
 parametre d'echantillonnage dont la valeur n'est pas celle par defaut —
-`temperature=0` comme `temperature=0.3`, l'appel est rejete en 400 dans
+`temperature=0` comme `temperature=0.1`, l'appel est rejete en 400 dans
 les deux cas. `GENERATION_TEMPERATURE` ne s'applique donc qu'a Groq, et
 aucune temperature n'est transmise a Claude. La consigne systeme, elle,
 reste identique pour les deux.
@@ -348,15 +348,23 @@ class Generator:
             )
         raise GenerationError(f"appel refuse ({response.status_code}) : {corps}")
 
-    def _appeler_groq(self, modele: ModeleGeneration, invite: str) -> _Brut:
+    def _appeler_groq(
+        self,
+        modele: ModeleGeneration,
+        systeme: str,
+        invite: str,
+        *,
+        temperature: float,
+        max_tokens: int,
+    ) -> _Brut:
         payload = {
             "model": modele.modele_api,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": systeme},
                 {"role": "user", "content": invite},
             ],
-            "temperature": self._settings.generation_temperature,
-            "max_tokens": self._settings.generation_max_tokens,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
         }
 
         data = self._post(payload)
@@ -398,15 +406,17 @@ class Generator:
             )
         return self._client_anthropic
 
-    def _appeler_claude(self, modele: ModeleGeneration, invite: str) -> _Brut:
+    def _appeler_claude(
+        self, modele: ModeleGeneration, systeme: str, invite: str, *, max_tokens: int
+    ) -> _Brut:
         import anthropic
 
         client = self._client()
         try:
             message = client.messages.create(
                 model=modele.modele_api,
-                max_tokens=self._settings.anthropic_max_tokens,
-                system=SYSTEM_PROMPT,
+                max_tokens=max_tokens,
+                system=systeme,
                 messages=[{"role": "user", "content": invite}],
                 # Raisonnement adaptatif : actif par defaut sur Sonnet 5, et
                 # c'est voulu — les extraits se contredisent souvent. L'effort
@@ -454,7 +464,63 @@ class Generator:
             tronquee=message.stop_reason == "max_tokens",
         )
 
-    # -- Point d'entree ----------------------------------------------------
+    # -- Points d'entree ---------------------------------------------------
+
+    def _executer(
+        self,
+        choisi: ModeleGeneration,
+        systeme: str,
+        invite: str,
+        *,
+        temperature: float,
+        max_tokens: int,
+    ) -> _Brut:
+        """Aiguille vers le bon fournisseur.
+
+        `temperature` est ignoree par Claude, qui la refuse : voir l'entete
+        du module.
+        """
+        if choisi.fournisseur == "anthropic":
+            return self._appeler_claude(
+                choisi, systeme, invite, max_tokens=self._settings.anthropic_max_tokens
+            )
+        return self._appeler_groq(
+            choisi, systeme, invite, temperature=temperature, max_tokens=max_tokens
+        )
+
+    def completer(
+        self,
+        systeme: str,
+        invite: str,
+        *,
+        temperature: float,
+        max_tokens: int,
+        modele: str | None = None,
+    ) -> str:
+        """Un appel brut au modele, sans analyse des citations.
+
+        Sert aux taches annexes de la chaine — la reformulation de requete
+        en particulier — qui ont besoin du meme transport mais d'une autre
+        consigne et d'une autre temperature.
+        """
+        choisi = self._resoudre(modele)
+        brut = self._executer(
+            choisi, systeme, invite, temperature=temperature, max_tokens=max_tokens
+        )
+
+        if brut.tronquee:
+            # Symptome indechiffrable sans cette phrase : sur un modele a
+            # raisonnement, le budget part en raisonnement avant la reponse,
+            # et l'appelant recoit une chaine vide sans erreur.
+            logger.warning(
+                "Appel annexe coupe par le plafond de sortie (max_tokens=%d). "
+                "Sur un modele a raisonnement — gpt-oss chez Groq —, le "
+                "raisonnement consomme ce budget avant la reponse : relever le "
+                "plafond plutot que de chercher ailleurs.",
+                max_tokens,
+            )
+
+        return brut.texte
 
     def answer(
         self, question: str, passages: list[Passage], modele: str | None = None
@@ -479,10 +545,13 @@ class Generator:
             f"Question : {question}"
         )
 
-        if choisi.fournisseur == "anthropic":
-            brut = self._appeler_claude(choisi, invite)
-        else:
-            brut = self._appeler_groq(choisi, invite)
+        brut = self._executer(
+            choisi,
+            SYSTEM_PROMPT,
+            invite,
+            temperature=self._settings.generation_temperature,
+            max_tokens=self._settings.generation_max_tokens,
+        )
 
         valides, invalides = extract_citations(brut.texte, len(passages))
 

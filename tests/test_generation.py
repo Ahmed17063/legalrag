@@ -175,11 +175,11 @@ def test_reponse_complete(settings, monkeypatch):
     assert r.model == "openai/gpt-oss-120b"
 
 
-def test_temperature_transmise(settings, monkeypatch):
-    """Bridee, mais pas nulle : 0,3 par defaut."""
+def test_temperature_de_redaction_transmise(settings, monkeypatch):
+    """Bridee, mais pas nulle : 0,1 par defaut pour la redaction."""
     gen, faux = generateur(settings, "Reponse [1].", monkeypatch)
     gen.answer("q", [passage()])
-    assert faux.payloads[0]["temperature"] == 0.3
+    assert faux.payloads[0]["temperature"] == 0.1
 
 
 def test_temperature_configurable(settings, monkeypatch):
@@ -487,7 +487,7 @@ def test_groq_reste_joignable_quand_claude_est_configure(settings, monkeypatch):
 
     r = gen.answer("q", [passage()], modele="groq")
     assert r.fournisseur == "groq"
-    assert faux.payloads[0]["temperature"] == 0.3
+    assert faux.payloads[0]["temperature"] == 0.1
 
 
 def test_le_plafond_de_claude_couvre_le_raisonnement(settings):

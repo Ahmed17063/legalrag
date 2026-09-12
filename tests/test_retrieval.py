@@ -436,3 +436,104 @@ def retrieval_estimate(texte):
     from legalrag.retrieval import estimate_tokens
 
     return estimate_tokens(texte)
+
+
+# ---------------------------------------------------------------------------
+# Reformulation de la requete
+# ---------------------------------------------------------------------------
+
+
+def _retriever_avec(settings, monkeypatch, reformulateur):
+    """Un Retriever instrumente, dont on peut lire les appels a Voyage."""
+    from legalrag import retrieval
+
+    points = [
+        FauxPoint(
+            charge(
+                "c1",
+                "Article 326- Aucune personne acquittee legalement ne peut plus etre reprise.",
+            ),
+            0.38,
+        )
+    ]
+    transport = FauxTransport()
+    monkeypatch.setattr(retrieval, "_make_client", lambda s: FauxQdrant(points))
+    monkeypatch.setattr(retrieval, "VoyageTransport", lambda **kw: transport)
+
+    return Retriever(settings, reformulateur), transport
+
+
+def _requete_embarquee(transport) -> str:
+    """Le texte reellement envoye au modele d'embedding."""
+    for endpoint, payload in transport.appels:
+        if endpoint == "contextualizedembeddings":
+            return payload["inputs"][0][0]
+    raise AssertionError("aucun appel d'embedding")
+
+
+def _requete_reclassee(transport) -> str:
+    for endpoint, payload in transport.appels:
+        if endpoint == "rerank":
+            return payload["query"]
+    raise AssertionError("aucun appel de reranking")
+
+
+QUESTION = "Peut-on rejuger un acquitte ?"
+REECRITE = "autorite de la chose jugee, non bis in idem, personne acquittee rejugee"
+
+
+def test_le_vectoriel_part_de_la_reformulation(settings, monkeypatch):
+    """C'est du vocabulaire que compare un modele d'embedding."""
+    r, transport = _retriever_avec(settings, monkeypatch, lambda q: REECRITE)
+    resultat = r.search(QUESTION, rerank=False)
+
+    assert _requete_embarquee(transport) == REECRITE
+    # La question posee reste celle de l'utilisateur.
+    assert resultat.query == QUESTION
+    assert resultat.query_reformulee == REECRITE
+
+
+def test_le_reranking_garde_la_question_d_origine(settings, monkeypatch):
+    """Le reranking juge la pertinence : il doit rester sur l'intention."""
+    r, transport = _retriever_avec(settings, monkeypatch, lambda q: REECRITE)
+    r.search(QUESTION, rerank=True)
+
+    assert _requete_embarquee(transport) == REECRITE
+    assert _requete_reclassee(transport) == QUESTION
+
+
+def test_sans_reformulateur_rien_ne_change(settings, monkeypatch):
+    r, transport = _retriever_avec(settings, monkeypatch, None)
+    resultat = r.search(QUESTION, rerank=False)
+
+    assert _requete_embarquee(transport) == QUESTION
+    assert resultat.query_reformulee is None
+
+
+def test_reformulation_desactivable_par_appel(settings, monkeypatch):
+    """De quoi comparer les deux comportements sur une meme question."""
+    r, transport = _retriever_avec(settings, monkeypatch, lambda q: REECRITE)
+    resultat = r.search(QUESTION, rerank=False, reformuler=False)
+
+    assert _requete_embarquee(transport) == QUESTION
+    assert resultat.query_reformulee is None
+
+
+def test_reformulation_desactivable_par_configuration(settings, monkeypatch):
+    from dataclasses import replace
+
+    sans = replace(settings, reformulation_enabled=False)
+    r, transport = _retriever_avec(sans, monkeypatch, lambda q: REECRITE)
+    resultat = r.search(QUESTION, rerank=False)
+
+    assert _requete_embarquee(transport) == QUESTION
+    assert resultat.query_reformulee is None
+
+
+def test_reformulation_inchangee_n_est_pas_signalee(settings, monkeypatch):
+    """Rien a montrer a l'utilisateur si la requete n'a pas bouge."""
+    r, transport = _retriever_avec(settings, monkeypatch, lambda q: q)
+    resultat = r.search(QUESTION, rerank=False)
+
+    assert _requete_embarquee(transport) == QUESTION
+    assert resultat.query_reformulee is None
