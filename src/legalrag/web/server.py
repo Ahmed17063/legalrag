@@ -51,6 +51,9 @@ class Question(BaseModel):
     top_k: int | None = Field(default=None, ge=1, le=50)
     top_n: int | None = Field(default=None, ge=1, le=10)
     rerank: bool = True
+    # Cle d'un modele configure (`groq`, `claude`). Absente, le defaut du
+    # serveur s'applique : un navigateur ancien continue de fonctionner.
+    modele: str | None = Field(default=None, max_length=40)
 
 
 class Etat:
@@ -122,6 +125,7 @@ def index() -> FileResponse:
 @app.get("/api/health")
 def health() -> dict[str, Any]:
     """Etat du service, et ce qui manque le cas echeant."""
+    modeles = etat.generator.modeles() if etat.generator is not None else []
     return {
         "pret": etat.retriever is not None,
         "generation": etat.generator is not None,
@@ -129,6 +133,9 @@ def health() -> dict[str, Any]:
         "documents": etat.documents,
         "modele_embedding": etat.settings.embedding_model if etat.settings else None,
         "modele_generation": etat.settings.generation_model if etat.settings else None,
+        # Modeles proposables a l'utilisateur, le defaut en tete.
+        "modeles": [m.as_dict() for m in modeles],
+        "modele_defaut": etat.generator.defaut if etat.generator is not None else None,
     }
 
 
@@ -137,6 +144,17 @@ def ask(payload: Question) -> JSONResponse:
     """Recherche puis redaction. C'est l'appel long."""
     if etat.retriever is None or etat.settings is None:
         raise HTTPException(503, etat.erreur or "Service non initialise")
+
+    # Verifie avant la recherche : elle consomme du quota Voyage et dure une
+    # minute, il serait absurde de la payer pour echouer ensuite.
+    if payload.modele and etat.generator is not None:
+        connus = {m.cle for m in etat.generator.modeles()}
+        if payload.modele not in connus:
+            raise HTTPException(
+                400,
+                f"Modele inconnu : {payload.modele!r}. "
+                "Disponibles : " + ", ".join(sorted(connus)) + ".",
+            )
 
     debut = time.monotonic()
     question = payload.question.strip()
@@ -155,13 +173,16 @@ def ask(payload: Question) -> JSONResponse:
             raise HTTPException(502, f"Recherche impossible : {exc}") from exc
 
         if etat.generator is None:
-            # Sans cle Groq, on rend quand meme les passages : c'est deja
-            # une reponse exploitable, juste non redigee.
+            # Sans cle de generation, on rend quand meme les passages :
+            # c'est deja une reponse exploitable, juste non redigee.
             return JSONResponse(
                 {
                     "question": question,
                     "answer": None,
-                    "raison": "Generation indisponible (GROQ_API_KEY absente).",
+                    "raison": (
+                        "Generation indisponible : ni GROQ_API_KEY ni "
+                        "ANTHROPIC_API_KEY ne sont renseignees."
+                    ),
                     "grounded": False,
                     "sources": [],
                     "passages": [p.as_dict() for p in resultat.passages],
@@ -170,7 +191,9 @@ def ask(payload: Question) -> JSONResponse:
             )
 
         try:
-            reponse = etat.generator.answer(question, resultat.passages)
+            reponse = etat.generator.answer(
+                question, resultat.passages, modele=payload.modele
+            )
         except GenerationError as exc:
             logger.exception("Generation en echec")
             raise HTTPException(502, f"Redaction impossible : {exc}") from exc

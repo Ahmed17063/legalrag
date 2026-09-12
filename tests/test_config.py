@@ -110,3 +110,57 @@ def test_corpus_local_verifie_le_repertoire(settings, tmp_path):
 
     present = replace(settings, corpus_source="local", local_corpus_dir=tmp_path)
     verifier_acces_corpus(present)  # ne doit pas lever
+
+
+# ---------------------------------------------------------------------------
+# Deuxieme fournisseur de generation
+# ---------------------------------------------------------------------------
+
+
+def environnement_minimal(monkeypatch):
+    """De quoi charger la configuration sans acces au corpus."""
+    for nom, valeur in {
+        "VOYAGE_API_KEY": "cle",
+        "GOOGLE_APPLICATION_CREDENTIALS": "",
+        "DRIVE_FOLDER_ID": "",
+        "CORPUS_SOURCE": "drive",
+    }.items():
+        monkeypatch.setenv(nom, valeur)
+
+
+def test_anthropic_absent_par_defaut(monkeypatch, tmp_path):
+    """Une installation existante continue de fonctionner avec Groq seul."""
+    from legalrag.config import load_settings
+
+    environnement_minimal(monkeypatch)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    settings = load_settings(tmp_path / "absent.env")
+    assert settings.anthropic_api_key is None
+    assert settings.anthropic_model == "claude-sonnet-5"
+    assert settings.generation_default == "groq"
+
+
+def test_anthropic_lu_depuis_l_environnement(monkeypatch, tmp_path):
+    from legalrag.config import load_settings
+
+    environnement_minimal(monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-de-test")
+    monkeypatch.setenv("ANTHROPIC_EFFORT", "medium")
+    monkeypatch.setenv("GENERATION_DEFAULT", "claude")
+
+    settings = load_settings(tmp_path / "absent.env")
+    assert settings.anthropic_api_key == "sk-ant-de-test"
+    assert settings.anthropic_effort == "medium"
+    assert settings.generation_default == "claude"
+
+
+def test_effort_inconnu_refuse(monkeypatch, tmp_path):
+    """L'API rejette une valeur inconnue : autant le dire au chargement."""
+    from legalrag.config import ConfigError, load_settings
+
+    environnement_minimal(monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_EFFORT", "maximal")
+
+    with pytest.raises(ConfigError, match="ANTHROPIC_EFFORT"):
+        load_settings(tmp_path / "absent.env")

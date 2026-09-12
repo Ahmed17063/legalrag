@@ -82,6 +82,13 @@
     font-size: .86rem;
     color: var(--texte-doux);
   }
+  /* Le choix du modele reste sur la meme ligne que son intitule, meme
+     quand la barre d'options passe a la ligne sur petit ecran. */
+  .bloc-modele {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
   select {
     font: inherit;
     padding: 6px 10px;
@@ -327,6 +334,10 @@
   <div class="options-inner">
     <label for="doc">Rechercher dans :</label>
     <select id="doc"><option value="">Tous les documents</option></select>
+    <span class="bloc-modele" id="bloc-modele" hidden>
+      <label for="modele">Rédigé par :</label>
+      <select id="modele"></select>
+    </span>
     <span id="etat-service"></span>
   </div>
 </div>
@@ -372,8 +383,16 @@ const fil       = document.getElementById("fil");
 const champ     = document.getElementById("question");
 const bouton    = document.getElementById("envoyer");
 const selectDoc = document.getElementById("doc");
+const selectMod = document.getElementById("modele");
+const blocMod   = document.getElementById("bloc-modele");
 const etatSvc   = document.getElementById("etat-service");
 let occupe = false;
+
+// Le choix du modèle survit au rechargement. Un navigateur en navigation
+// privée peut refuser le stockage : on ne veut pas casser la page pour ça.
+const MEMOIRE = "legalrag.modele";
+function lireMemoire()      { try { return localStorage.getItem(MEMOIRE); } catch { return null; } }
+function ecrireMemoire(cle) { try { localStorage.setItem(MEMOIRE, cle); } catch { /* ignoré */ } }
 
 // --- Amorçage ---------------------------------------------------------
 for (const texte of EXEMPLES) {
@@ -400,11 +419,39 @@ fetch("/api/health").then(r => r.json()).then(sante => {
   if (!sante.generation) {
     etatSvc.textContent = "⚠ Rédaction indisponible : seuls les extraits seront affichés.";
     etatSvc.style.color = "var(--rouge)";
+    return;
   }
+  remplirModeles(sante.modeles ?? [], sante.modele_defaut);
 }).catch(() => {
   etatSvc.textContent = "⚠ Service injoignable.";
   etatSvc.style.color = "var(--rouge)";
 });
+
+// Un seul modèle configuré : le menu reste affiché — savoir qui rédige la
+// réponse fait partie de l'information — mais il n'y a rien à choisir.
+function remplirModeles(modeles, defaut) {
+  if (!modeles.length) return;
+
+  for (const m of modeles) {
+    const o = document.createElement("option");
+    o.value = m.cle;
+    o.textContent = m.libelle;
+    o.title = m.description;
+    selectMod.appendChild(o);
+  }
+
+  const memorise = lireMemoire();
+  const connu = modeles.some(m => m.cle === memorise);
+  selectMod.value = connu ? memorise : (defaut ?? modeles[0].cle);
+
+  selectMod.disabled = modeles.length === 1;
+  selectMod.title = modeles.find(m => m.cle === selectMod.value)?.description ?? "";
+  selectMod.onchange = () => {
+    ecrireMemoire(selectMod.value);
+    selectMod.title = modeles.find(m => m.cle === selectMod.value)?.description ?? "";
+  };
+  blocMod.hidden = false;
+}
 
 // --- Saisie -----------------------------------------------------------
 function ajusterHauteur() {
@@ -529,6 +576,15 @@ function ajouterReponse(tour, data) {
     bloc.appendChild(a);
   }
 
+  // Une réponse coupée en plein milieu d'un article peut se lire comme une
+  // règle complète : il faut le dire.
+  if (data.tronquee) {
+    const t = document.createElement("div");
+    t.className = "alerte";
+    t.textContent = "Réponse interrompue par la limite de longueur : elle est incomplète.";
+    bloc.appendChild(t);
+  }
+
   const passages = data.passages ?? [];
   if (passages.length) {
     const s = document.createElement("div");
@@ -585,7 +641,11 @@ async function demander() {
     const r = await fetch("/api/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: texte, document_id: selectDoc.value || null }),
+      body: JSON.stringify({
+        question: texte,
+        document_id: selectDoc.value || null,
+        modele: selectMod.value || null,
+      }),
     });
     arreter();
     if (!r.ok) {

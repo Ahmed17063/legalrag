@@ -10,8 +10,9 @@ plausible et fausse. Trois garde-fous, tous verifiables :
 
 1. **Passages numerotes, citation obligatoire.** Le modele doit rattacher
    chaque affirmation a un numero de passage.
-2. **Temperature nulle.** Aucune raison de vouloir de la variete quand on
-   restitue du droit.
+2. **Echantillonnage le plus deterministe possible.** Aucune raison de
+   vouloir de la variete quand on restitue du droit. Voir la reserve sur
+   Claude plus bas.
 3. **Verification apres coup.** Les numeros cites sont controles : hors
    plage, ils sont signales. Une reponse sans aucune citation est marquee
    comme non etayee, et l'appelant peut la refuser.
@@ -19,6 +20,23 @@ plausible et fausse. Trois garde-fous, tous verifiables :
 Aucun de ces garde-fous ne rend le modele infaillible. La reponse est
 donc toujours rendue **avec** les passages qui l'ont nourrie, pour que la
 verification humaine reste possible.
+
+Deux fournisseurs
+-----------------
+
+Le module en expose deux, choisis par l'appelant appel par appel :
+
+* **Groq**, API compatible OpenAI, appelee en HTTP direct — rapide et
+  gratuite dans les limites du palier d'essai ;
+* **Claude** (Anthropic), via le SDK officiel — plus lent, mais il
+  raisonne avant de repondre, ce qui aide quand les extraits se
+  contredisent ou melangent plusieurs ordres juridiques.
+
+Une reserve sur le garde-fou n° 2 : Claude Sonnet 5 **refuse** les
+parametres d'echantillonnage non par defaut, `temperature=0` compris — un
+tel appel est rejete en 400. La consigne systeme reste identique, mais le
+determinisme n'est pas reglable de ce cote. Il ne l'a d'ailleurs jamais
+garanti : `temperature=0` n'a jamais promis deux reponses identiques.
 """
 
 from __future__ import annotations
@@ -79,6 +97,63 @@ class RetryableGenerationError(GenerationError):
     """Erreur transitoire : quota momentane, panne serveur, reseau."""
 
 
+@dataclass(frozen=True, slots=True)
+class ModeleGeneration:
+    """Un modele proposable a l'utilisateur.
+
+    `cle` est l'identifiant stable echange avec le navigateur et la ligne
+    de commande ; `modele_api` est ce que le fournisseur attend, et peut
+    changer par variable d'environnement sans casser les appelants.
+    """
+
+    cle: str
+    libelle: str
+    fournisseur: str
+    modele_api: str
+    description: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "cle": self.cle,
+            "libelle": self.libelle,
+            "fournisseur": self.fournisseur,
+            "modele": self.modele_api,
+            "description": self.description,
+        }
+
+
+def modeles_disponibles(settings: Settings) -> dict[str, ModeleGeneration]:
+    """Modeles reellement utilisables, c'est-a-dire ceux dont la cle existe.
+
+    Proposer dans l'interface un modele sans cle d'API ne menerait qu'a une
+    erreur au premier appel : mieux vaut ne pas l'afficher.
+    """
+    modeles: dict[str, ModeleGeneration] = {}
+
+    if settings.groq_api_key:
+        modeles["groq"] = ModeleGeneration(
+            cle="groq",
+            libelle=f"Groq — {settings.generation_model}",
+            fournisseur="groq",
+            modele_api=settings.generation_model,
+            description="Rapide. Repond directement, sans etape de raisonnement.",
+        )
+
+    if settings.anthropic_api_key:
+        modeles["claude"] = ModeleGeneration(
+            cle="claude",
+            libelle=f"Claude — {settings.anthropic_model}",
+            fournisseur="anthropic",
+            modele_api=settings.anthropic_model,
+            description=(
+                "Plus lent. Raisonne avant de repondre : utile quand les "
+                "extraits se contredisent ou melangent plusieurs ordres juridiques."
+            ),
+        )
+
+    return modeles
+
+
 @dataclass
 class Answer:
     """Une reponse redigee, et de quoi la verifier."""
@@ -91,6 +166,10 @@ class Answer:
     model: str = ""
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    fournisseur: str = ""
+    # Le modele a-t-il ete coupe par le plafond de sortie ? Une reponse
+    # juridique tronquee au milieu d'une phrase doit se voir.
+    tronquee: bool = False
 
     @property
     def grounded(self) -> bool:
@@ -120,6 +199,8 @@ class Answer:
             "invalid_citations": list(self.invalid_citations),
             "sources": self.sources(),
             "model": self.model,
+            "fournisseur": self.fournisseur,
+            "tronquee": self.tronquee,
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "passages": [p.as_dict() for p in self.passages],
@@ -147,24 +228,87 @@ def extract_citations(text: str, nb_passages: int) -> tuple[tuple[int, ...], tup
     return tuple(valides), tuple(invalides)
 
 
+@dataclass(frozen=True, slots=True)
+class _Brut:
+    """Ce que renvoie un fournisseur, avant analyse des citations.
+
+    Les deux API ne se ressemblent pas — Groq nomme `prompt_tokens` ce
+    qu'Anthropic appelle `input_tokens`, et decrit l'arret par
+    `finish_reason` la ou l'autre parle de `stop_reason`. Cette structure
+    absorbe l'ecart pour que `answer` n'ait plus qu'un seul cas a traiter.
+    """
+
+    texte: str
+    modele: str
+    prompt_tokens: int
+    completion_tokens: int
+    tronquee: bool
+
+
 class Generator:
-    """Redige une reponse a partir des passages, via l'API Groq."""
+    """Redige une reponse a partir des passages, via Groq ou Claude."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        if not settings.groq_api_key:
+        self._modeles = modeles_disponibles(settings)
+        if not self._modeles:
             raise GenerationError(
-                "GROQ_API_KEY absente. Renseignez-la dans .env, ou lancez la "
-                "recherche sans generation (commande `search`)."
+                "Aucune cle de generation. Renseignez GROQ_API_KEY ou "
+                "ANTHROPIC_API_KEY dans .env, ou lancez la recherche sans "
+                "generation (commande `search`)."
             )
 
-        self._session = requests.Session()
-        self._session.headers.update(
-            {
-                "Authorization": f"Bearer {settings.groq_api_key}",
-                "Content-Type": "application/json",
-            }
-        )
+        defaut = settings.generation_default
+        if defaut not in self._modeles:
+            # Le defaut configure n'a pas de cle : on prend le premier
+            # utilisable plutot que d'echouer au premier appel.
+            defaut = next(iter(self._modeles))
+            if settings.generation_default in {"groq", "claude"}:
+                logger.info(
+                    "GENERATION_DEFAULT=%r sans cle d'API : %r pris par defaut.",
+                    settings.generation_default,
+                    defaut,
+                )
+        self._defaut = defaut
+
+        self._session: requests.Session | None = None
+        self._client_anthropic: Any = None
+
+    # -- Modeles -----------------------------------------------------------
+
+    def modeles(self) -> list[ModeleGeneration]:
+        """Modeles proposables, le defaut en tete."""
+        ordre = sorted(self._modeles.values(), key=lambda m: m.cle != self._defaut)
+        return ordre
+
+    @property
+    def defaut(self) -> str:
+        return self._defaut
+
+    def _resoudre(self, cle: str | None) -> ModeleGeneration:
+        if not cle:
+            return self._modeles[self._defaut]
+        modele = self._modeles.get(cle)
+        if modele is None:
+            raise GenerationError(
+                f"Modele {cle!r} indisponible. Modeles configures : "
+                + ", ".join(sorted(self._modeles))
+                + "."
+            )
+        return modele
+
+    # -- Groq : API compatible OpenAI, en HTTP direct ----------------------
+
+    def _session_groq(self) -> requests.Session:
+        if self._session is None:
+            self._session = requests.Session()
+            self._session.headers.update(
+                {
+                    "Authorization": f"Bearer {self._settings.groq_api_key}",
+                    "Content-Type": "application/json",
+                }
+            )
+        return self._session
 
     @retry(
         retry=retry_if_exception_type(RetryableGenerationError),
@@ -174,7 +318,7 @@ class Generator:
     )
     def _post(self, payload: dict) -> dict:
         try:
-            response = self._session.post(
+            response = self._session_groq().post(
                 f"{GROQ_API_ROOT}/chat/completions", json=payload, timeout=120
             )
         except requests.RequestException as exc:
@@ -201,26 +345,12 @@ class Generator:
             )
         raise GenerationError(f"appel refuse ({response.status_code}) : {corps}")
 
-    def answer(self, question: str, passages: list[Passage]) -> Answer:
-        """Redige une reponse etayee par les passages fournis."""
-        if not passages:
-            return Answer(
-                question=question,
-                text=AUCUNE_REPONSE,
-                model=self._settings.generation_model,
-            )
-
+    def _appeler_groq(self, modele: ModeleGeneration, invite: str) -> _Brut:
         payload = {
-            "model": self._settings.generation_model,
+            "model": modele.modele_api,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Extraits de textes de loi :\n\n{build_context(passages)}\n\n"
-                        f"Question : {question}"
-                    ),
-                },
+                {"role": "user", "content": invite},
             ],
             # Aucune raison de vouloir de la variete quand on restitue du droit.
             "temperature": 0,
@@ -228,21 +358,149 @@ class Generator:
         }
 
         data = self._post(payload)
-        texte = data["choices"][0]["message"]["content"].strip()
+        choix = data["choices"][0]
         usage = data.get("usage", {})
 
-        valides, invalides = extract_citations(texte, len(passages))
+        return _Brut(
+            texte=choix["message"]["content"].strip(),
+            modele=data.get("model", modele.modele_api),
+            prompt_tokens=int(usage.get("prompt_tokens", 0)),
+            completion_tokens=int(usage.get("completion_tokens", 0)),
+            tronquee=choix.get("finish_reason") == "length",
+        )
+
+    # -- Claude : SDK officiel Anthropic -----------------------------------
+
+    def _client(self) -> Any:
+        """Client Anthropic, construit au premier appel.
+
+        L'import est differe : une installation qui n'utilise que Groq n'a
+        pas a charger le SDK, et le serveur demarre sans lui.
+        """
+        if self._client_anthropic is None:
+            try:
+                import anthropic
+            except ImportError as exc:  # pragma: no cover - depend de l'install
+                raise GenerationError(
+                    "Le paquet `anthropic` est absent alors qu'ANTHROPIC_API_KEY "
+                    "est renseignee. Installez-le (`uv sync`) ou retirez la cle "
+                    "pour n'utiliser que Groq."
+                ) from exc
+
+            self._client_anthropic = anthropic.Anthropic(
+                api_key=self._settings.anthropic_api_key,
+                # Le SDK reessaie seul les 429, 5xx et coupures reseau, avec
+                # un repli exponentiel. Inutile de superposer tenacity ici.
+                max_retries=4,
+                timeout=180.0,
+            )
+        return self._client_anthropic
+
+    def _appeler_claude(self, modele: ModeleGeneration, invite: str) -> _Brut:
+        import anthropic
+
+        client = self._client()
+        try:
+            message = client.messages.create(
+                model=modele.modele_api,
+                max_tokens=self._settings.anthropic_max_tokens,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": invite}],
+                # Raisonnement adaptatif : actif par defaut sur Sonnet 5, et
+                # c'est voulu — les extraits se contredisent souvent. L'effort
+                # reste bas, la tache etant de citer, non de resoudre.
+                output_config={"effort": self._settings.anthropic_effort},
+                # Pas de `temperature` : Sonnet 5 rejette en 400 tout parametre
+                # d'echantillonnage non par defaut. Voir l'entete du module.
+            )
+        except anthropic.AuthenticationError as exc:
+            raise GenerationError(
+                "Authentification Anthropic refusee. Verifiez ANTHROPIC_API_KEY. "
+                f"Detail : {exc}"
+            ) from exc
+        except anthropic.NotFoundError as exc:
+            raise GenerationError(
+                f"Modele {modele.modele_api!r} introuvable chez Anthropic. "
+                "Verifiez ANTHROPIC_MODEL. Detail : " + str(exc)
+            ) from exc
+        except anthropic.APIConnectionError as exc:
+            raise RetryableGenerationError(f"erreur reseau : {exc}") from exc
+        except anthropic.APIStatusError as exc:
+            raise GenerationError(
+                f"appel refuse ({exc.status_code}) : {exc}"
+            ) from exc
+
+        # `content` est une liste de blocs typés : avec le raisonnement
+        # adaptatif, les blocs `thinking` y figurent aussi. Seul le texte
+        # nous interesse.
+        texte = "".join(
+            bloc.text for bloc in message.content if bloc.type == "text"
+        ).strip()
+
+        if message.stop_reason == "refusal":
+            raise GenerationError(
+                "Le modele a refuse de repondre a cette question."
+            )
+
+        return _Brut(
+            texte=texte,
+            modele=message.model,
+            prompt_tokens=message.usage.input_tokens,
+            completion_tokens=message.usage.output_tokens,
+            tronquee=message.stop_reason == "max_tokens",
+        )
+
+    # -- Point d'entree ----------------------------------------------------
+
+    def answer(
+        self, question: str, passages: list[Passage], modele: str | None = None
+    ) -> Answer:
+        """Redige une reponse etayee par les passages fournis.
+
+        `modele` est la cle d'un modele configure (`groq`, `claude`) ; sans
+        elle, le modele par defaut est utilise.
+        """
+        choisi = self._resoudre(modele)
+
+        if not passages:
+            return Answer(
+                question=question,
+                text=AUCUNE_REPONSE,
+                model=choisi.modele_api,
+                fournisseur=choisi.fournisseur,
+            )
+
+        invite = (
+            f"Extraits de textes de loi :\n\n{build_context(passages)}\n\n"
+            f"Question : {question}"
+        )
+
+        if choisi.fournisseur == "anthropic":
+            brut = self._appeler_claude(choisi, invite)
+        else:
+            brut = self._appeler_groq(choisi, invite)
+
+        valides, invalides = extract_citations(brut.texte, len(passages))
 
         reponse = Answer(
             question=question,
-            text=texte,
+            text=brut.texte,
             passages=passages,
             cited=valides,
             invalid_citations=invalides,
-            model=data.get("model", self._settings.generation_model),
-            prompt_tokens=int(usage.get("prompt_tokens", 0)),
-            completion_tokens=int(usage.get("completion_tokens", 0)),
+            model=brut.modele,
+            fournisseur=choisi.fournisseur,
+            prompt_tokens=brut.prompt_tokens,
+            completion_tokens=brut.completion_tokens,
+            tronquee=brut.tronquee,
         )
+
+        if brut.tronquee:
+            logger.warning(
+                "Reponse coupee par le plafond de sortie (%s). Elle peut "
+                "s'arreter au milieu d'une phrase.",
+                choisi.cle,
+            )
 
         if invalides:
             logger.warning(

@@ -35,6 +35,9 @@ VOYAGE_ATLAS_URL = "https://ai.mongodb.com/v1"
 VOYAGE_ATLAS_EU_URL = "https://eu.ai.mongodb.com/v1"
 VOYAGE_ATLAS_US_URL = "https://us.ai.mongodb.com/v1"
 
+# Niveaux d'effort acceptes par l'API Anthropic pour le raisonnement.
+EFFORTS_ANTHROPIC = frozenset({"low", "medium", "high", "xhigh", "max"})
+
 
 class ConfigError(RuntimeError):
     """Configuration absente ou incoherente."""
@@ -121,6 +124,20 @@ class Settings:
     generation_model: str
     generation_max_tokens: int
 
+    # Deuxieme fournisseur de generation. Les champs portent une valeur par
+    # defaut : les sites de construction existants (tests compris) n'ont pas
+    # a etre repris, et une installation sans cle Anthropic fonctionne comme
+    # avant, avec Groq seul.
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-sonnet-5"
+    # Ce plafond couvre le raisonnement *et* la reponse : Claude Sonnet 5
+    # active le raisonnement adaptatif par defaut, et `max_tokens` borne le
+    # total. Une valeur calquee sur GENERATION_MAX_TOKENS tronquerait la
+    # reponse au milieu d'une phrase.
+    anthropic_max_tokens: int = 4096
+    anthropic_effort: str = "low"
+    generation_default: str = "groq"
+
     @property
     def is_contextualized(self) -> bool:
         return self.embedding_mode == "contextualized"
@@ -204,6 +221,15 @@ def load_settings(env_file: Path | None = None) -> Settings:
             f"CHUNK_TOKENS ({chunk_tokens}) depasse le contexte de {model!r} ({max_tokens})"
         )
 
+    # Niveau d'effort de raisonnement d'Anthropic. Une valeur inconnue est
+    # refusee par l'API : mieux vaut le dire ici que perdre l'appel.
+    effort = _env("ANTHROPIC_EFFORT", "low")
+    if effort not in EFFORTS_ANTHROPIC:
+        raise ConfigError(
+            f"ANTHROPIC_EFFORT={effort!r} inconnu "
+            f"(valeurs possibles : {', '.join(sorted(EFFORTS_ANTHROPIC))})"
+        )
+
     return Settings(
         voyage_api_key=api_key,
         voyage_base_url=resolve_base_url(api_key, _env("VOYAGE_API_BASE_URL")),
@@ -236,6 +262,11 @@ def load_settings(env_file: Path | None = None) -> Settings:
         groq_api_key=_env("GROQ_API_KEY"),
         generation_model=_env("GENERATION_MODEL", "openai/gpt-oss-120b"),
         generation_max_tokens=_env_int("GENERATION_MAX_TOKENS", 2048),
+        anthropic_api_key=_env("ANTHROPIC_API_KEY"),
+        anthropic_model=_env("ANTHROPIC_MODEL", "claude-sonnet-5"),
+        anthropic_max_tokens=_env_int("ANTHROPIC_MAX_TOKENS", 4096),
+        anthropic_effort=effort,
+        generation_default=_env("GENERATION_DEFAULT", "groq"),
     )
 
 

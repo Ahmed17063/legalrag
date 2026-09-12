@@ -85,6 +85,11 @@ def build_parser() -> argparse.ArgumentParser:
     ask_cmd.add_argument("--no-rerank", action="store_true", help="Sauter le reranking")
     ask_cmd.add_argument("--json", action="store_true", help="Sortie JSON")
     ask_cmd.add_argument(
+        "--modele",
+        default=None,
+        help="Modele redacteur : 'groq' ou 'claude'. Par defaut GENERATION_DEFAULT",
+    )
+    ask_cmd.add_argument(
         "--show-passages",
         action="store_true",
         help="Afficher aussi le texte integral des extraits utilises",
@@ -173,7 +178,9 @@ def main(argv: list[str] | None = None) -> int:
                     document_id=args.document,
                     rerank=not args.no_rerank,
                 )
-            reponse = Generator(settings).answer(args.question, resultat.passages)
+            reponse = Generator(settings).answer(
+                args.question, resultat.passages, modele=args.modele
+            )
             _afficher_reponse(reponse, en_json=args.json, extraits=args.show_passages)
 
         elif args.command == "ingest":

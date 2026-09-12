@@ -87,13 +87,13 @@ Elles sont scindées selon ce qui tourne en ligne et ce qui tourne hors ligne :
 
 | Groupe | Contenu | Sert à |
 |---|---|---|
-| principal | `fastapi`, `uvicorn`, `pydantic`, `qdrant-client`, `requests`, `tenacity`, `python-dotenv` | `serve`, `ask`, `search` |
+| principal | `fastapi`, `uvicorn`, `pydantic`, `qdrant-client`, `anthropic`, `requests`, `tenacity`, `python-dotenv` | `serve`, `ask`, `search` |
 | extra `indexation` | `pyarrow`, `pypdf`, `google-api-python-client`, `google-auth`, `voyageai` | `index`, `qdrant`, `ingest`, `compact` |
 
 Le serveur interroge Qdrant, Voyage et Groq **par le réseau** : il ne lit ni
 Drive, ni PDF, ni index Parquet. Rien de l'extra ne lui est donc nécessaire,
-et l'image Docker ne l'embarque pas — 104 Mo de site-packages au lieu de
-349, 35 paquets au lieu de 87.
+et l'image Docker ne l'embarque pas — 101 Mo de site-packages au lieu de
+355, 42 paquets au lieu de 90.
 
 Le groupe `dev` tire `legalrag[indexation]`, sans quoi les tests du pipeline
 ne pourraient pas s'exécuter — et `uv sync` synchronise `dev` par défaut. En
@@ -104,9 +104,9 @@ consigne d'installation.
 
 | Installation | Effet | Paquets |
 |---|---|---|
-| `uv sync --no-dev` | Serveur web seul — ce qu'installe l'image Docker | 35 |
-| `uv sync` | Y compris `dev`, qui tire l'extra `indexation` et pytest | 91 |
-| `uv sync --all-groups` | Identique ici : `dev` est le seul groupe | 91 |
+| `uv sync --no-dev` | Serveur web seul — ce qu'installe l'image Docker | 42 |
+| `uv sync` | Y compris `dev`, qui tire l'extra `indexation` et pytest | 94 |
+| `uv sync --all-groups` | Identique ici : `dev` est le seul groupe | 94 |
 
 ### Autres commandes uv
 
@@ -446,6 +446,7 @@ uv run legalrag search "ta question" --top-k 8 --top-n 3
 # Une réponse rédigée, avec ses sources
 uv run legalrag ask "ta question" --top-k 8 --top-n 3
 uv run legalrag ask "..." --show-passages   # + le texte intégral cité
+uv run legalrag ask "..." --modele claude   # rédigée par Claude plutôt que Groq
 ```
 
 La recherche procède en trois temps : vectoriel dans Qdrant, découpage de
@@ -461,7 +462,8 @@ toutes vérifiables :
 
 - **passages numérotés, citation obligatoire** : chaque affirmation doit
   porter son `[n]` ;
-- **température nulle** : aucune raison de vouloir de la variété ;
+- **échantillonnage le plus déterministe possible** : aucune raison de vouloir
+  de la variété (voir la réserve sur Claude ci-dessous) ;
 - **vérification après coup** : les numéros cités sont contrôlés. Hors plage,
   ils sont signalés ; une réponse sans citation est marquée non étayée.
 
@@ -469,6 +471,43 @@ La réponse est toujours rendue **avec** les passages qui l'ont nourrie : la
 vérification humaine doit rester possible. Le modèle a pour consigne d'écrire
 exactement « La réponse ne figure pas dans les documents fournis » plutôt que
 d'inventer.
+
+### Deux modèles rédacteurs
+
+Le corpus, la recherche et la consigne système sont les mêmes ; seul le
+modèle qui rédige change.
+
+| Clé | Fournisseur | Modèle | Caractère |
+|---|---|---|---|
+| `groq` | Groq, HTTP direct (API compatible OpenAI) | `openai/gpt-oss-120b` | Rapide, répond sans étape de raisonnement |
+| `claude` | Anthropic, SDK officiel | `claude-sonnet-5` | Plus lent, raisonne avant de répondre |
+
+Claude se justifie quand les extraits se contredisent, ou mélangent droit
+mauritanien, droit de l'Union et conventions internationales — les règles 6
+à 10 de la consigne demandent précisément un arbitrage, et un modèle qui
+raisonne s'en tire mieux.
+
+**Seuls les modèles dont la clé est renseignée sont proposés.** Sans
+`ANTHROPIC_API_KEY`, rien ne change : Groq reste seul, et le menu de
+l'interface n'affiche que lui. Sans aucune clé, la recherche continue de
+fonctionner et rend les extraits bruts.
+
+Deux différences de comportement, imposées par l'API et non par un choix
+d'implémentation :
+
+- **`temperature=0` est refusée par Sonnet 5** (erreur 400 sur tout paramètre
+  d'échantillonnage non par défaut). Le garde-fou n° 2 ne s'applique donc
+  qu'à Groq. La perte est plus théorique que réelle : `temperature=0` n'a
+  jamais garanti deux réponses identiques.
+- **Le raisonnement adaptatif est actif par défaut** et `ANTHROPIC_MAX_TOKENS`
+  borne le raisonnement *plus* la réponse — d'où 4096 par défaut, contre 2048
+  pour Groq. Si la limite est malgré tout atteinte, la réponse est marquée
+  tronquée, dans le terminal comme dans la page.
+
+Réglages : `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_MAX_TOKENS`,
+`ANTHROPIC_EFFORT` (`low` par défaut — la tâche est de citer des extraits
+fournis, non de les résoudre) et `GENERATION_DEFAULT` (`groq` ou `claude`,
+le modèle présélectionné). Voir `.env.example`.
 
 ## 9 ter. L'interface web
 
@@ -486,8 +525,8 @@ les bandes rouges et le croissant du drapeau de 2017.
 | Route | Rôle |
 |---|---|
 | `GET /` | La page du chatbot |
-| `GET /api/health` | État du service, liste des documents indexés |
-| `POST /api/ask` | Question → réponse sourcée (JSON) |
+| `GET /api/health` | État du service, documents indexés, modèles disponibles |
+| `POST /api/ask` | Question → réponse sourcée (JSON). Champ `modele` facultatif |
 | `GET /docs` | Documentation OpenAPI, générée par FastAPI |
 
 Trois points de conception méritent d'être signalés :
@@ -498,8 +537,12 @@ Trois points de conception méritent d'être signalés :
   en `def` et non `async def` : FastAPI les exécute dans un fil séparé. Un
   verrou sérialise les recherches, ce qui correspond de toute façon au débit
   autorisé.
-- **Sans clé Groq, le service ne tombe pas** : il renvoie les extraits
-  trouvés, simplement non rédigés.
+- **Sans clé de génération, le service ne tombe pas** : il renvoie les
+  extraits trouvés, simplement non rédigés.
+- **Le modèle rédacteur se choisit dans la page**, quand plusieurs sont
+  configurés. Le choix est retenu d'une visite à l'autre, et un modèle
+  inconnu est refusé *avant* la recherche : celle-ci coûte une minute et du
+  quota Voyage, il serait absurde de la payer pour échouer ensuite.
 
 Les avertissements du moteur — réponse non étayée, citation d'un extrait
 inexistant — sont affichés en rouge dans la page, au même titre que dans le
@@ -577,8 +620,8 @@ joignable que depuis l'intérieur du conteneur.
 **Dépendances du serveur seul.** `uv sync --frozen --no-dev` n'installe pas
 les extras : `pyarrow`, les bibliothèques Google, `pypdf` et `voyageai`
 restent dehors. Ils ne servent qu'à l'indexation, qui tourne hors ligne sur
-un poste de travail et n'a rien à faire dans l'image — 104 Mo de site-packages
-au lieu de 349, et autant de surface à ne plus suivre côté sécurité. Un test
+un poste de travail et n'a rien à faire dans l'image — 101 Mo de site-packages
+au lieu de 355, et autant de surface à ne plus suivre côté sécurité. Un test
 vérifie que le chemin d'import du serveur ne les atteint jamais : les modules
 d'indexation sont chargés dans le corps des branches de la CLI qui les
 utilisent, pas au niveau du module.

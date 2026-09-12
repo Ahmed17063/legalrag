@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from legalrag.generation import Answer, GenerationError
+from legalrag.generation import Answer, GenerationError, ModeleGeneration
 from legalrag.retrieval import Passage, SearchResult
 from legalrag.web import server as module_web
 
@@ -61,11 +61,36 @@ class FauxRetriever:
 
 
 class FauxGenerator:
-    def __init__(self, reponse=None, erreur=None):
+    def __init__(self, reponse=None, erreur=None, modeles=None):
         self._reponse = reponse
         self._erreur = erreur
+        self._modeles = modeles if modeles is not None else [
+            ModeleGeneration(
+                cle="groq",
+                libelle="Groq — openai/gpt-oss-120b",
+                fournisseur="groq",
+                modele_api="openai/gpt-oss-120b",
+                description="Rapide.",
+            ),
+            ModeleGeneration(
+                cle="claude",
+                libelle="Claude — claude-sonnet-5",
+                fournisseur="anthropic",
+                modele_api="claude-sonnet-5",
+                description="Raisonne avant de repondre.",
+            ),
+        ]
+        self.demandes: list[str | None] = []
 
-    def answer(self, question, passages):
+    def modeles(self):
+        return list(self._modeles)
+
+    @property
+    def defaut(self):
+        return self._modeles[0].cle if self._modeles else None
+
+    def answer(self, question, passages, modele=None):
+        self.demandes.append(modele)
         if self._erreur:
             raise self._erreur
         return self._reponse or Answer(
@@ -178,12 +203,13 @@ def test_top_n_hors_bornes_refuse(client):
 
 
 def test_sans_generation_les_extraits_sont_rendus(client, monkeypatch):
-    """Sans cle Groq, la recherche reste utile : on renvoie les passages."""
+    """Sans cle de generation, la recherche reste utile : on renvoie les passages."""
     monkeypatch.setattr(module_web.etat, "generator", None)
 
     d = client.post("/api/ask", json={"question": "Une question"}).json()
     assert d["answer"] is None
     assert "GROQ_API_KEY" in d["raison"]
+    assert "ANTHROPIC_API_KEY" in d["raison"]
     assert len(d["passages"]) == 1
 
 
@@ -250,3 +276,52 @@ def test_citations_inexistantes_signalees(client, monkeypatch):
     d = client.post("/api/ask", json={"question": "Une question"}).json()
     assert d["invalid_citations"] == [9]
     assert d["grounded"] is False
+
+
+# ---------------------------------------------------------------------------
+# Choix du modele redacteur
+# ---------------------------------------------------------------------------
+
+
+def test_sante_expose_les_modeles(client):
+    """Le navigateur construit sa liste deroulante a partir de /api/health."""
+    donnees = client.get("/api/health").json()
+
+    cles = [m["cle"] for m in donnees["modeles"]]
+    assert cles == ["groq", "claude"]
+    assert donnees["modele_defaut"] == "groq"
+
+    claude = donnees["modeles"][1]
+    assert claude["fournisseur"] == "anthropic"
+    assert claude["modele"] == "claude-sonnet-5"
+    assert claude["description"]
+
+
+def test_sante_sans_generation_n_expose_aucun_modele(client, monkeypatch):
+    monkeypatch.setattr(module_web.etat, "generator", None)
+
+    donnees = client.get("/api/health").json()
+    assert donnees["modeles"] == []
+    assert donnees["modele_defaut"] is None
+
+
+def test_modele_demande_transmis(client):
+    client.post("/api/ask", json={"question": "Une question", "modele": "claude"})
+    assert module_web.etat.generator.demandes[-1] == "claude"
+
+
+def test_sans_modele_le_defaut_du_serveur_s_applique(client):
+    """Un navigateur en cache, ou la CLI, peuvent ne rien envoyer."""
+    r = client.post("/api/ask", json={"question": "Une question"})
+    assert r.status_code == 200
+    assert module_web.etat.generator.demandes[-1] is None
+
+
+def test_modele_inconnu_refuse_avant_la_recherche(client):
+    """La recherche coute une minute et du quota Voyage : echouer d'abord."""
+    r = client.post("/api/ask", json={"question": "Une question", "modele": "mistral"})
+
+    assert r.status_code == 400
+    assert "mistral" in r.json()["detail"]
+    assert module_web.etat.retriever.appels == []
+    assert module_web.etat.generator.demandes == []

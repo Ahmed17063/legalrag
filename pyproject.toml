@@ -13,6 +13,11 @@ dependencies = [
     # --- Base vectorielle, interrogee par le reseau --------------------------
     "qdrant-client>=1.12",
 
+    # --- Generation : Claude. Groq est appele en HTTP direct (API compatible
+    #     OpenAI), Anthropic par son SDK officiel. Le serveur web propose les
+    #     deux : la dependance appartient donc au socle, pas a l'indexation.
+    "anthropic>=1.5,<2",
+
     # --- Interface web -------------------------------------------------------
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",

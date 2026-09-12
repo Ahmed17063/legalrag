@@ -14,6 +14,7 @@ from legalrag.generation import (
     Generator,
     build_context,
     extract_citations,
+    modeles_disponibles,
 )
 from legalrag.retrieval import Passage
 
@@ -282,3 +283,203 @@ def test_plafond_de_sortie_suffisant(settings):
     """Une reponse juridique detaillee depasse 1024 tokens : la precedente
     valeur tronquait la reponse au milieu d'une phrase."""
     assert settings.generation_max_tokens >= 2048
+
+
+# ---------------------------------------------------------------------------
+# Choix du fournisseur
+# ---------------------------------------------------------------------------
+
+
+def avec_claude(settings, **kwargs):
+    return replace(settings, anthropic_api_key="cle-anthropic-de-test", **kwargs)
+
+
+def test_seul_groq_configure(settings):
+    """Sans cle Anthropic, rien ne doit proposer Claude."""
+    assert list(modeles_disponibles(settings)) == ["groq"]
+
+
+def test_les_deux_configures(settings):
+    modeles = modeles_disponibles(avec_claude(settings))
+    assert set(modeles) == {"groq", "claude"}
+    assert modeles["claude"].modele_api == "claude-sonnet-5"
+    assert modeles["claude"].fournisseur == "anthropic"
+
+
+def test_aucune_cle_ne_propose_rien(settings):
+    assert modeles_disponibles(replace(settings, groq_api_key=None)) == {}
+
+
+def test_un_modele_sans_cle_n_est_pas_propose(settings):
+    """Le proposer ne menerait qu'a une erreur au premier appel."""
+    claude_seul = replace(
+        settings, groq_api_key=None, anthropic_api_key="cle-anthropic-de-test"
+    )
+    gen = Generator(claude_seul)
+    assert [m.cle for m in gen.modeles()] == ["claude"]
+    assert gen.defaut == "claude"
+
+
+def test_defaut_configure_sans_cle_bascule(settings):
+    """GENERATION_DEFAULT=claude sans ANTHROPIC_API_KEY ne doit pas echouer."""
+    gen = Generator(replace(settings, generation_default="claude"))
+    assert gen.defaut == "groq"
+
+
+def test_le_defaut_est_en_tete(settings):
+    gen = Generator(avec_claude(settings, generation_default="claude"))
+    assert [m.cle for m in gen.modeles()][0] == "claude"
+
+
+def test_modele_inconnu_refuse(settings):
+    gen = Generator(settings)
+    with pytest.raises(GenerationError, match="claude"):
+        gen.answer("q", [passage()], modele="claude")
+
+
+# ---------------------------------------------------------------------------
+# Appel a Claude, sans reseau
+# ---------------------------------------------------------------------------
+
+
+class BlocTexte:
+    type = "text"
+
+    def __init__(self, text):
+        self.text = text
+
+
+class BlocRaisonnement:
+    """Avec le raisonnement adaptatif, `content` contient aussi ces blocs."""
+
+    type = "thinking"
+
+    def __init__(self, thinking=""):
+        self.thinking = thinking
+
+
+class Usage:
+    def __init__(self, entree, sortie):
+        self.input_tokens = entree
+        self.output_tokens = sortie
+
+
+class MessageClaude:
+    def __init__(self, blocs, stop_reason="end_turn"):
+        self.content = blocs
+        self.model = "claude-sonnet-5"
+        self.usage = Usage(1200, 80)
+        self.stop_reason = stop_reason
+
+
+class FauxAnthropic:
+    """Repond comme le SDK Anthropic, et memorise les arguments recus."""
+
+    def __init__(self, blocs=None, stop_reason="end_turn"):
+        self._blocs = blocs if blocs is not None else [BlocTexte("Non [1].")]
+        self._stop_reason = stop_reason
+        self.appels = []
+        self.messages = self
+
+    def create(self, **kwargs):
+        self.appels.append(kwargs)
+        return MessageClaude(self._blocs, self._stop_reason)
+
+
+def generateur_claude(settings, monkeypatch, **kwargs):
+    gen = Generator(avec_claude(settings))
+    faux = FauxAnthropic(**kwargs)
+    monkeypatch.setattr(gen, "_client_anthropic", faux)
+    return gen, faux
+
+
+def test_claude_repond(settings, monkeypatch):
+    gen, _ = generateur_claude(settings, monkeypatch)
+    r = gen.answer("Peut-on rejuger ?", [passage("326")], modele="claude")
+
+    assert r.text == "Non [1]."
+    assert r.cited == (1,)
+    assert r.grounded
+    assert r.model == "claude-sonnet-5"
+    assert r.fournisseur == "anthropic"
+    assert r.prompt_tokens == 1200
+    assert r.completion_tokens == 80
+
+
+def test_claude_ne_recoit_aucune_temperature(settings, monkeypatch):
+    """Sonnet 5 rejette en 400 tout parametre d'echantillonnage non par
+    defaut. Envoyer temperature=0 ferait echouer chaque appel."""
+    gen, faux = generateur_claude(settings, monkeypatch)
+    gen.answer("q", [passage()], modele="claude")
+
+    envoye = faux.appels[0]
+    assert "temperature" not in envoye
+    assert "top_p" not in envoye
+    assert "top_k" not in envoye
+
+
+def test_claude_laisse_le_raisonnement_adaptatif(settings, monkeypatch):
+    """Omettre `thinking` vaut adaptatif sur Sonnet 5, ce qui est voulu."""
+    gen, faux = generateur_claude(settings, monkeypatch)
+    gen.answer("q", [passage()], modele="claude")
+
+    envoye = faux.appels[0]
+    assert "thinking" not in envoye
+    assert envoye["output_config"] == {"effort": "low"}
+
+
+def test_claude_recoit_la_consigne_et_les_extraits(settings, monkeypatch):
+    gen, faux = generateur_claude(settings, monkeypatch)
+    gen.answer("Ma question ?", [passage("326")], modele="claude")
+
+    envoye = faux.appels[0]
+    # La consigne systeme passe par le parametre dedie, pas par `messages`.
+    assert envoye["system"] == SYSTEM_PROMPT
+    assert [m["role"] for m in envoye["messages"]] == ["user"]
+    assert "Article 326-" in envoye["messages"][0]["content"]
+    assert "Ma question ?" in envoye["messages"][0]["content"]
+
+
+def test_claude_ignore_les_blocs_de_raisonnement(settings, monkeypatch):
+    """Seul le texte compte : un bloc `thinking` n'est pas une reponse."""
+    gen, _ = generateur_claude(
+        settings, monkeypatch, blocs=[BlocRaisonnement("je reflechis"), BlocTexte("Non [1].")]
+    )
+    r = gen.answer("q", [passage()], modele="claude")
+    assert r.text == "Non [1]."
+
+
+def test_claude_plafond_atteint_signale(settings, monkeypatch, caplog):
+    """Une reponse coupee au milieu d'un article doit se voir."""
+    import logging
+
+    gen, _ = generateur_claude(settings, monkeypatch, stop_reason="max_tokens")
+    with caplog.at_level(logging.WARNING):
+        r = gen.answer("q", [passage()], modele="claude")
+
+    assert r.tronquee
+    assert r.as_dict()["tronquee"] is True
+    assert "coupee" in caplog.text
+
+
+def test_claude_refus_remonte(settings, monkeypatch):
+    gen, _ = generateur_claude(settings, monkeypatch, stop_reason="refusal")
+    with pytest.raises(GenerationError, match="refus"):
+        gen.answer("q", [passage()], modele="claude")
+
+
+def test_groq_reste_joignable_quand_claude_est_configure(settings, monkeypatch):
+    """Configurer Claude ne doit rien changer au chemin Groq."""
+    gen = Generator(avec_claude(settings))
+    faux = FauxGroq("Oui [1].")
+    monkeypatch.setattr(gen, "_post", faux)
+
+    r = gen.answer("q", [passage()], modele="groq")
+    assert r.fournisseur == "groq"
+    assert faux.payloads[0]["temperature"] == 0
+
+
+def test_le_plafond_de_claude_couvre_le_raisonnement(settings):
+    """`max_tokens` borne raisonnement + reponse : il doit depasser le
+    plafond prevu pour une reponse seule."""
+    assert settings.anthropic_max_tokens > settings.generation_max_tokens
