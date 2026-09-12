@@ -81,11 +81,39 @@ uv run legalrag ask "ta question"
 uv run pytest
 ```
 
+### Deux groupes de dépendances
+
+Elles sont scindées selon ce qui tourne en ligne et ce qui tourne hors ligne :
+
+| Groupe | Contenu | Sert à |
+|---|---|---|
+| principal | `fastapi`, `uvicorn`, `pydantic`, `qdrant-client`, `requests`, `tenacity`, `python-dotenv` | `serve`, `ask`, `search` |
+| extra `indexation` | `pyarrow`, `pypdf`, `google-api-python-client`, `google-auth`, `voyageai` | `index`, `qdrant`, `ingest`, `compact` |
+
+Le serveur interroge Qdrant, Voyage et Groq **par le réseau** : il ne lit ni
+Drive, ni PDF, ni index Parquet. Rien de l'extra ne lui est donc nécessaire,
+et l'image Docker ne l'embarque pas — 104 Mo de site-packages au lieu de
+349, 35 paquets au lieu de 87.
+
+Le groupe `dev` tire `legalrag[indexation]`, sans quoi les tests du pipeline
+ne pourraient pas s'exécuter — et `uv sync` synchronise `dev` par défaut. En
+développement, rien ne change donc : tout est installé. Seule l'image
+Docker, qui passe `--no-dev`, s'en tient au strict nécessaire. Une commande
+hors ligne lancée sans l'extra ne produit pas une trace d'import, mais la
+consigne d'installation.
+
+| Installation | Effet | Paquets |
+|---|---|---|
+| `uv sync --no-dev` | Serveur web seul — ce qu'installe l'image Docker | 35 |
+| `uv sync` | Y compris `dev`, qui tire l'extra `indexation` et pytest | 91 |
+| `uv sync --all-groups` | Identique ici : `dev` est le seul groupe | 91 |
+
+### Autres commandes uv
+
 | Commande | Effet |
 |---|---|
-| `uv sync` | Dépendances de production seulement |
-| `uv sync --all-groups` | Y compris `dev` (pytest) |
 | `uv add <paquet>` | Ajoute une dépendance et met `uv.lock` à jour |
+| `uv add --optional indexation <paquet>` | Idem, dans l'extra d'indexation |
 | `uv add --group dev <paquet>` | Idem, dans le groupe de développement |
 | `uv lock --upgrade` | Remonte les versions dans les bornes déclarées |
 | `uv run <commande>` | Exécute dans l'environnement, sans l'activer |
@@ -98,7 +126,8 @@ uv) :
 uv export --no-dev --format requirements-txt > requirements.txt
 ```
 
-Ne pas versionner ce fichier généré — il divergerait du lock.
+`--no-dev` donne le serveur web seul ; ajouter `--extra indexation` pour le
+job hors ligne. Ne pas versionner ce fichier généré — il divergerait du lock.
 
 ### Dans VS Code
 
@@ -545,13 +574,14 @@ joignable que depuis l'intérieur du conteneur.
 
 **Sonde de santé** sur `/api/health`, qui vérifie la connexion à Qdrant.
 
-### Une limite connue
-
-L'image embarque toutes les dépendances du projet, y compris celles que le
-serveur web n'utilise pas — `pyarrow`, les bibliothèques Google, `pypdf`,
-`voyageai`. Les séparer en groupes optionnels allégerait sensiblement
-l'image, au prix d'une installation locale en deux temps. Ça n'a pas été
-fait : la simplicité du `uv sync` unique a été préférée.
+**Dépendances du serveur seul.** `uv sync --frozen --no-dev` n'installe pas
+les extras : `pyarrow`, les bibliothèques Google, `pypdf` et `voyageai`
+restent dehors. Ils ne servent qu'à l'indexation, qui tourne hors ligne sur
+un poste de travail et n'a rien à faire dans l'image — 104 Mo de site-packages
+au lieu de 349, et autant de surface à ne plus suivre côté sécurité. Un test
+vérifie que le chemin d'import du serveur ne les atteint jamais : les modules
+d'indexation sont chargés dans le corps des branches de la CLI qui les
+utilisent, pas au niveau du module.
 
 ## 10. Skills Claude Code
 

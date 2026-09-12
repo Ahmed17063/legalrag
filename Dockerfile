@@ -29,6 +29,10 @@ COPY pyproject.toml uv.lock ./
 
 # --no-install-project : le projet lui-meme viendra apres, pour ne pas
 # invalider le cache des dependances a chaque modification du code.
+#
+# Aucun --extra : l'extra `indexation` (pyarrow, pypdf, google-*, voyageai)
+# ne sert qu'au job hors ligne et n'a rien a faire ici. Ne pas l'ajouter :
+# le serveur n'en importe rien, et tests/test_dependances.py le verifie.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project
 

@@ -14,12 +14,15 @@ import sys
 from pathlib import Path
 
 from .config import ConfigError, load_settings
-from .index_store import IndexError_, IndexStore, make_manifest
 from .generation import GenerationError
-from .qdrant_store import QdrantStoreError
 from .logging_setup import setup_logging
-from .pipeline import push_to_qdrant, run
 from .veille import garder_eveille
+
+# `pipeline`, `index_store` et `qdrant_store` entrainent pyarrow et les
+# bibliotheques Google, qui ne servent qu'a l'indexation. Les importer ici
+# les rendrait obligatoires pour lancer le serveur web, et l'image Docker
+# ne pourrait pas s'en passer. Ils sont donc charges dans les branches qui
+# les utilisent.
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +135,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "index":
+            from .pipeline import run
+
             # Ce job dure de quelques minutes a plusieurs heures : une mise
             # en veille le suspendrait, et le diagnostic serait trompeur.
             with garder_eveille("l'indexation"):
@@ -201,6 +206,8 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         elif args.command == "qdrant":
+            from .pipeline import push_to_qdrant
+
             with garder_eveille("le chargement dans Qdrant"):
                 rapport = push_to_qdrant(settings, recreate=args.recreate, prune=args.prune)
             print(rapport.summary(), file=sys.stderr)
@@ -208,14 +215,20 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "compact":
             _store(settings).compact(remove_parts=args.remove_parts)
 
+    except _erreurs_indexation() as exc:
+        logger.error("Traitement impossible.\n%s", exc)
+        return 2
     except GenerationError as exc:
         logger.error("Generation impossible.\n%s", exc)
         return 2
-    except QdrantStoreError as exc:
-        logger.error("Chargement Qdrant impossible.\n%s", exc)
-        return 2
-    except IndexError_ as exc:
-        logger.error("Index incoherent.\n%s", exc)
+    except ImportError as exc:
+        # L'installation par defaut ne couvre que le serveur web. Une trace
+        # brute laisserait croire a un bug ; c'est une dependance absente.
+        message = _message_extra_manquant(exc, args.command)
+        if message is None:
+            logger.exception("Echec du job : %s", exc)
+            return 1
+        logger.error("%s", message)
         return 2
     except KeyboardInterrupt:
         # Les lots deja ecrits sont valides : la reprise repartira d'eux.
@@ -314,7 +327,58 @@ def _afficher_reponse(reponse, en_json: bool = False, extraits: bool = False) ->
     )
 
 
-def _store(settings) -> IndexStore:
+# Distributions apportees par l'extra `indexation`, indexees par le module
+# qu'elles installent : sert a nommer le paquet manquant dans le message.
+_PAQUETS_INDEXATION = {
+    "googleapiclient": "google-api-python-client",
+    "google": "google-auth",
+    "pyarrow": "pyarrow",
+    "pypdf": "pypdf",
+    "voyageai": "voyageai",
+}
+
+
+def _message_extra_manquant(exc: ImportError, commande: str | None) -> str | None:
+    """Transforme un ImportError en consigne d'installation.
+
+    Les commandes hors ligne (`index`, `qdrant`, `ingest`, `compact`) tirent
+    des bibliotheques lourdes que l'image web n'embarque pas. Le message
+    doit dire quoi installer, pas afficher une pile d'appels.
+
+    Renvoie None si l'import rate pour une autre raison : l'appelant traite
+    alors l'erreur comme un bug ordinaire, trace comprise.
+    """
+    racine = (exc.name or "").split(".")[0]
+    paquet = _PAQUETS_INDEXATION.get(racine)
+    if paquet is None:
+        return None
+
+    return (
+        f"La commande '{commande}' demande {paquet}, absent de cette installation.\n"
+        "Seules les dependances du serveur web sont installees par defaut.\n"
+        "Ajoutez celles de l'indexation :\n"
+        "    uv sync --extra indexation\n"
+        "  ou : pip install 'legalrag[indexation]'"
+    )
+
+
+def _erreurs_indexation() -> tuple[type[Exception], ...]:
+    """Erreurs des modules d'indexation, chargees seulement si presents.
+
+    Une image qui ne sert que le web n'installe pas ces dependances :
+    les importer ici ferait echouer le demarrage.
+    """
+    try:
+        from .index_store import IndexError_
+        from .qdrant_store import QdrantStoreError
+    except ImportError:
+        return ()
+    return (IndexError_, QdrantStoreError)
+
+
+def _store(settings):
+    from .index_store import IndexStore, make_manifest
+
     return IndexStore(
         settings.index_dir,
         make_manifest(

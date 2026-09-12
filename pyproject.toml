@@ -10,21 +10,7 @@ dependencies = [
     "tenacity>=9.0,<10",
     "python-dotenv>=1.0",
 
-    # --- Index sur disque ----------------------------------------------------
-    "pyarrow>=17.0",
-
-    # --- Ingestion de PDF ----------------------------------------------------
-    "pypdf>=6.0",
-
-    # --- Google Drive (compte de service, lecture seule) ---------------------
-    "google-api-python-client>=2.140",
-    "google-auth>=2.34",
-
-    # --- Tokenizer exact Voyage. Sans lui, le comptage de tokens retombe sur
-    #     une heuristique plus prudente : le job tourne, avec plus de marge.
-    "voyageai>=0.3.2",
-
-    # --- Base vectorielle ----------------------------------------------------
+    # --- Base vectorielle, interrogee par le reseau --------------------------
     "qdrant-client>=1.12",
 
     # --- Interface web -------------------------------------------------------
@@ -35,9 +21,27 @@ dependencies = [
     "pydantic>=2.0",
 ]
 
+[project.optional-dependencies]
+# Tout ce qui ne sert qu'a fabriquer l'index : lecture de Drive, extraction
+# de PDF, ecriture Parquet, tokenizer exact. Le serveur web n'en a aucun
+# besoin — il interroge Qdrant par le reseau — et l'image Docker s'en
+# trouve sensiblement allegee.
+#
+#     uv sync --extra indexation
+indexation = [
+    "pyarrow>=17.0",
+    "pypdf>=6.0",
+    "google-api-python-client>=2.140",
+    "google-auth>=2.34",
+    "voyageai>=0.3.2",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",
+    # Les tests couvrent l'indexation : le groupe de developpement tire
+    # l'extra, pour qu'un `uv sync --all-groups` suffise.
+    "legalrag[indexation]",
 ]
 
 [project.scripts]
