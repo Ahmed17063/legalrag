@@ -164,3 +164,43 @@ def test_effort_inconnu_refuse(monkeypatch, tmp_path):
 
     with pytest.raises(ConfigError, match="ANTHROPIC_EFFORT"):
         load_settings(tmp_path / "absent.env")
+
+
+def test_temperature_par_defaut(monkeypatch, tmp_path):
+    """Bridee, mais pas nulle."""
+    from legalrag.config import load_settings
+
+    environnement_minimal(monkeypatch)
+    monkeypatch.delenv("GENERATION_TEMPERATURE", raising=False)
+
+    assert load_settings(tmp_path / "absent.env").generation_temperature == 0.3
+
+
+def test_temperature_lue_depuis_l_environnement(monkeypatch, tmp_path):
+    from legalrag.config import load_settings
+
+    environnement_minimal(monkeypatch)
+    monkeypatch.setenv("GENERATION_TEMPERATURE", "0.7")
+
+    assert load_settings(tmp_path / "absent.env").generation_temperature == 0.7
+
+
+@pytest.mark.parametrize("valeur", ["-0.1", "2.5"])
+def test_temperature_hors_bornes_refusee(monkeypatch, tmp_path, valeur):
+    from legalrag.config import ConfigError, load_settings
+
+    environnement_minimal(monkeypatch)
+    monkeypatch.setenv("GENERATION_TEMPERATURE", valeur)
+
+    with pytest.raises(ConfigError, match="GENERATION_TEMPERATURE"):
+        load_settings(tmp_path / "absent.env")
+
+
+def test_temperature_non_numerique_refusee(monkeypatch, tmp_path):
+    from legalrag.config import ConfigError, load_settings
+
+    environnement_minimal(monkeypatch)
+    monkeypatch.setenv("GENERATION_TEMPERATURE", "tiede")
+
+    with pytest.raises(ConfigError, match="GENERATION_TEMPERATURE"):
+        load_settings(tmp_path / "absent.env")

@@ -462,8 +462,9 @@ toutes vérifiables :
 
 - **passages numérotés, citation obligatoire** : chaque affirmation doit
   porter son `[n]` ;
-- **échantillonnage le plus déterministe possible** : aucune raison de vouloir
-  de la variété (voir la réserve sur Claude ci-dessous) ;
+- **échantillonnage bridé** : `GENERATION_TEMPERATURE` vaut 0,3 — assez bas
+  pour rester fidèle au texte, assez haut pour éviter les formulations figées
+  d'une température nulle (voir la réserve sur Claude ci-dessous) ;
 - **vérification après coup** : les numéros cités sont contrôlés. Hors plage,
   ils sont signalés ; une réponse sans citation est marquée non étayée.
 
@@ -473,6 +474,9 @@ exactement « La réponse ne figure pas dans les documents fournis » plutôt qu
 d'inventer.
 
 ### Deux modèles rédacteurs
+
+> Obtenir la clé Anthropic, écran par écran :
+> **[docs/configuration-anthropic.md](docs/configuration-anthropic.md)**
 
 Le corpus, la recherche et la consigne système sont les mêmes ; seul le
 modèle qui rédige change.
@@ -495,16 +499,17 @@ fonctionner et rend les extraits bruts.
 Deux différences de comportement, imposées par l'API et non par un choix
 d'implémentation :
 
-- **`temperature=0` est refusée par Sonnet 5** (erreur 400 sur tout paramètre
-  d'échantillonnage non par défaut). Le garde-fou n° 2 ne s'applique donc
-  qu'à Groq. La perte est plus théorique que réelle : `temperature=0` n'a
-  jamais garanti deux réponses identiques.
+- **Aucune température n'est transmise à Claude.** Sonnet 5 rejette en 400
+  tout paramètre d'échantillonnage dont la valeur n'est pas la sienne par
+  défaut : `0,3` échouerait exactement comme `0`. `GENERATION_TEMPERATURE`
+  ne vaut donc que pour Groq, et le garde-fou n° 2 ne s'applique qu'à lui.
 - **Le raisonnement adaptatif est actif par défaut** et `ANTHROPIC_MAX_TOKENS`
   borne le raisonnement *plus* la réponse — d'où 4096 par défaut, contre 2048
   pour Groq. Si la limite est malgré tout atteinte, la réponse est marquée
   tronquée, dans le terminal comme dans la page.
 
-Réglages : `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_MAX_TOKENS`,
+Réglages : `GENERATION_TEMPERATURE` (Groq), `ANTHROPIC_API_KEY`,
+`ANTHROPIC_MODEL`, `ANTHROPIC_MAX_TOKENS`,
 `ANTHROPIC_EFFORT` (`low` par défaut — la tâche est de citer des extraits
 fournis, non de les résoudre) et `GENERATION_DEFAULT` (`groq` ou `claude`,
 le modèle présélectionné). Voir `.env.example`.

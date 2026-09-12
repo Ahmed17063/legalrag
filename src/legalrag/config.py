@@ -81,6 +81,16 @@ def _env_int(name: str, default: int) -> int:
         raise ConfigError(f"{name} doit etre un entier, recu {raw!r}") from exc
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = _env(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{name} doit etre un nombre, recu {raw!r}") from exc
+
+
 def _env_bool(name: str, default: bool) -> bool:
     raw = _env(name)
     if raw is None:
@@ -123,6 +133,11 @@ class Settings:
     groq_api_key: str | None
     generation_model: str
     generation_max_tokens: int
+
+    # Temperature d'echantillonnage. Ne s'applique qu'a Groq : Claude
+    # Sonnet 5 rejette en 400 toute valeur non par defaut, quelle qu'elle
+    # soit. Voir generation.py.
+    generation_temperature: float = 0.3
 
     # Deuxieme fournisseur de generation. Les champs portent une valeur par
     # defaut : les sites de construction existants (tests compris) n'ont pas
@@ -221,6 +236,13 @@ def load_settings(env_file: Path | None = None) -> Settings:
             f"CHUNK_TOKENS ({chunk_tokens}) depasse le contexte de {model!r} ({max_tokens})"
         )
 
+    temperature = _env_float("GENERATION_TEMPERATURE", 0.3)
+    if not 0.0 <= temperature <= 2.0:
+        raise ConfigError(
+            f"GENERATION_TEMPERATURE={temperature} hors bornes : l'API n'accepte "
+            "qu'une valeur entre 0 et 2."
+        )
+
     # Niveau d'effort de raisonnement d'Anthropic. Une valeur inconnue est
     # refusee par l'API : mieux vaut le dire ici que perdre l'appel.
     effort = _env("ANTHROPIC_EFFORT", "low")
@@ -262,6 +284,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         groq_api_key=_env("GROQ_API_KEY"),
         generation_model=_env("GENERATION_MODEL", "openai/gpt-oss-120b"),
         generation_max_tokens=_env_int("GENERATION_MAX_TOKENS", 2048),
+        generation_temperature=temperature,
         anthropic_api_key=_env("ANTHROPIC_API_KEY"),
         anthropic_model=_env("ANTHROPIC_MODEL", "claude-sonnet-5"),
         anthropic_max_tokens=_env_int("ANTHROPIC_MAX_TOKENS", 4096),

@@ -175,11 +175,19 @@ def test_reponse_complete(settings, monkeypatch):
     assert r.model == "openai/gpt-oss-120b"
 
 
-def test_temperature_nulle(settings, monkeypatch):
-    """Aucune raison de vouloir de la variete quand on restitue du droit."""
+def test_temperature_transmise(settings, monkeypatch):
+    """Bridee, mais pas nulle : 0,3 par defaut."""
     gen, faux = generateur(settings, "Reponse [1].", monkeypatch)
     gen.answer("q", [passage()])
-    assert faux.payloads[0]["temperature"] == 0
+    assert faux.payloads[0]["temperature"] == 0.3
+
+
+def test_temperature_configurable(settings, monkeypatch):
+    gen, faux = generateur(
+        replace(settings, generation_temperature=0.7), "Reponse [1].", monkeypatch
+    )
+    gen.answer("q", [passage()])
+    assert faux.payloads[0]["temperature"] == 0.7
 
 
 def test_les_extraits_sont_transmis(settings, monkeypatch):
@@ -386,8 +394,11 @@ class FauxAnthropic:
         return MessageClaude(self._blocs, self._stop_reason)
 
 
-def generateur_claude(settings, monkeypatch, **kwargs):
-    gen = Generator(avec_claude(settings))
+def generateur_claude(settings, monkeypatch, temperature=None, **kwargs):
+    reglages = avec_claude(settings)
+    if temperature is not None:
+        reglages = replace(reglages, generation_temperature=temperature)
+    gen = Generator(reglages)
     faux = FauxAnthropic(**kwargs)
     monkeypatch.setattr(gen, "_client_anthropic", faux)
     return gen, faux
@@ -407,9 +418,9 @@ def test_claude_repond(settings, monkeypatch):
 
 
 def test_claude_ne_recoit_aucune_temperature(settings, monkeypatch):
-    """Sonnet 5 rejette en 400 tout parametre d'echantillonnage non par
-    defaut. Envoyer temperature=0 ferait echouer chaque appel."""
-    gen, faux = generateur_claude(settings, monkeypatch)
+    """Sonnet 5 rejette en 400 tout parametre d'echantillonnage dont la
+    valeur n'est pas celle par defaut : 0,3 echouerait autant que 0."""
+    gen, faux = generateur_claude(settings, monkeypatch, temperature=0.3)
     gen.answer("q", [passage()], modele="claude")
 
     envoye = faux.appels[0]
@@ -476,7 +487,7 @@ def test_groq_reste_joignable_quand_claude_est_configure(settings, monkeypatch):
 
     r = gen.answer("q", [passage()], modele="groq")
     assert r.fournisseur == "groq"
-    assert faux.payloads[0]["temperature"] == 0
+    assert faux.payloads[0]["temperature"] == 0.3
 
 
 def test_le_plafond_de_claude_couvre_le_raisonnement(settings):

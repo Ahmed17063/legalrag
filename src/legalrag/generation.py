@@ -10,9 +10,11 @@ plausible et fausse. Trois garde-fous, tous verifiables :
 
 1. **Passages numerotes, citation obligatoire.** Le modele doit rattacher
    chaque affirmation a un numero de passage.
-2. **Echantillonnage le plus deterministe possible.** Aucune raison de
-   vouloir de la variete quand on restitue du droit. Voir la reserve sur
-   Claude plus bas.
+2. **Echantillonnage bride.** On ne cherche pas de la variete quand on
+   restitue du droit. `GENERATION_TEMPERATURE` vaut 0,3 par defaut : assez
+   bas pour rester fidele au texte, assez haut pour eviter les boucles et
+   les formulations figees que produit parfois une temperature nulle. Voir
+   la reserve sur Claude plus bas.
 3. **Verification apres coup.** Les numeros cites sont controles : hors
    plage, ils sont signales. Une reponse sans aucune citation est marquee
    comme non etayee, et l'appelant peut la refuser.
@@ -32,11 +34,12 @@ Le module en expose deux, choisis par l'appelant appel par appel :
   raisonne avant de repondre, ce qui aide quand les extraits se
   contredisent ou melangent plusieurs ordres juridiques.
 
-Une reserve sur le garde-fou n° 2 : Claude Sonnet 5 **refuse** les
-parametres d'echantillonnage non par defaut, `temperature=0` compris — un
-tel appel est rejete en 400. La consigne systeme reste identique, mais le
-determinisme n'est pas reglable de ce cote. Il ne l'a d'ailleurs jamais
-garanti : `temperature=0` n'a jamais promis deux reponses identiques.
+Une reserve sur le garde-fou n° 2 : Claude Sonnet 5 **refuse** tout
+parametre d'echantillonnage dont la valeur n'est pas celle par defaut —
+`temperature=0` comme `temperature=0.3`, l'appel est rejete en 400 dans
+les deux cas. `GENERATION_TEMPERATURE` ne s'applique donc qu'a Groq, et
+aucune temperature n'est transmise a Claude. La consigne systeme, elle,
+reste identique pour les deux.
 """
 
 from __future__ import annotations
@@ -352,8 +355,7 @@ class Generator:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": invite},
             ],
-            # Aucune raison de vouloir de la variete quand on restitue du droit.
-            "temperature": 0,
+            "temperature": self._settings.generation_temperature,
             "max_tokens": self._settings.generation_max_tokens,
         }
 
@@ -411,7 +413,9 @@ class Generator:
                 # reste bas, la tache etant de citer, non de resoudre.
                 output_config={"effort": self._settings.anthropic_effort},
                 # Pas de `temperature` : Sonnet 5 rejette en 400 tout parametre
-                # d'echantillonnage non par defaut. Voir l'entete du module.
+                # d'echantillonnage dont la valeur n'est pas celle par defaut.
+                # GENERATION_TEMPERATURE ne vaut donc que pour Groq — envoyer
+                # 0.3 ici ferait echouer chaque appel. Voir l'entete du module.
             )
         except anthropic.AuthenticationError as exc:
             raise GenerationError(
