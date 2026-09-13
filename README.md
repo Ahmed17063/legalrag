@@ -384,7 +384,11 @@ Concrètement :
 | [`index_store.py`](src/legalrag/index_store.py) | Écriture Parquet atomique et reprise |
 | [`pipeline.py`](src/legalrag/pipeline.py) | Orchestration |
 | [`retrieval.py`](src/legalrag/retrieval.py) | Recherche : vectoriel, découpage par article, reranking |
-| [`generation.py`](src/legalrag/generation.py) | Rédaction de la réponse (Groq), avec vérification des citations |
+| [`generation.py`](src/legalrag/generation.py) | Rédaction de la réponse (Groq ou Claude), avec vérification des citations |
+| [`reformulation.py`](src/legalrag/reformulation.py) | Réécriture de la question dans le vocabulaire du corpus |
+| [`statuts.py`](src/legalrag/statuts.py) | Statut juridique des textes, apposé à la recherche |
+| [`perimetre.py`](src/legalrag/perimetre.py) | Restriction du corpus interrogeable à un domaine |
+| [`ingestion.py`](src/legalrag/ingestion.py) | PDF → pages `.txt`, français séparé de l'arabe |
 | [`web/server.py`](src/legalrag/web/server.py) | Interface web FastAPI |
 | [`cli.py`](src/legalrag/cli.py) | Ligne de commande |
 | [`config.py`](src/legalrag/config.py) | Configuration par variables d'environnement |
