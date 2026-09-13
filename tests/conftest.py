@@ -45,6 +45,9 @@ def settings(tmp_path: Path) -> Settings:
         retrieval_top_k=25,
         retrieval_top_n=5,
         statuts_file=tmp_path / "statuts.json",
+        # Chemin inexistant : les tests ne doivent pas heriter du
+        # perimetre reel du depot, qui restreint le corpus a la peche.
+        perimetre_file=tmp_path / "perimetre.json",
         groq_api_key="cle-groq-de-test",
         generation_model="openai/gpt-oss-120b",
         generation_max_tokens=2048,

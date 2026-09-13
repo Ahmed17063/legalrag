@@ -23,6 +23,7 @@ services:
       # ni acces Drive, et ces variables ne doivent pas etre requises.
       CORPUS_SOURCE: drive
       STATUTS_FILE: /app/data/statuts.json
+      PERIMETRE_FILE: /app/data/perimetre.json
 
     ports:
       - "8000:8000"
@@ -32,6 +33,7 @@ services:
     # un redemarrage du conteneur.
     volumes:
       - ./data/statuts.json:/app/data/statuts.json:ro
+      - ./data/perimetre.json:/app/data/perimetre.json:ro
 
     restart: unless-stopped
 

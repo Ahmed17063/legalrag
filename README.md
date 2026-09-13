@@ -456,6 +456,65 @@ puis reranking des passages face à la question. Sans ce découpage, un chunk
 de 2554 caractères contenant 6,3 articles en moyenne noierait l'article
 pertinent.
 
+### Restreindre le corpus à un domaine
+
+Le corpus couvre tout le droit mauritanien — 43 documents, 12 037 chunks.
+Pour travailler sur un domaine précis, le reste n'ajoute que du bruit au
+vectoriel et dilue le budget de reranking. [data/perimetre.json](data/perimetre.json)
+restreint la recherche à une liste de documents :
+
+```json
+{
+  "libelle": "Peche et droit maritime",
+  "actif": true,
+  "documents": { "mauritanie-recueil-28-droit-maritime": "pourquoi il est là" }
+}
+```
+
+**Rien n'est supprimé.** La restriction s'applique *à l'interrogation*, comme
+le registre des statuts : un filtre Qdrant posé au moment de chercher. Revenir
+au corpus entier demande de passer `actif` à `false` — pas de réindexation, pas
+de réembedding, aucune écriture dans la collection. Les embeddings sont payés
+une fois, ils restent.
+
+Le périmètre actuel, volontairement large, retient **37 documents sur 43,
+soit 10 979 chunks — 91 % du corpus**. Un texte entre dès qu'un usage concret
+se formule pour une question de pêche. Chaque entrée porte sa justification et
+son rang d'utilité :
+
+| Rang | Documents | Chunks | Critère |
+|---|---:|---:|---|
+| `noyau` | 10 | 1 670 | Le texte énonce ou encadre directement la règle de pêche |
+| `connexe` | 17 | 6 007 | Un usage précis et attesté dans le texte |
+| `peripherique` | 10 | 3 302 | Lien réel mais ténu — les premiers à retirer |
+
+Six documents seulement sont écartés, faute de lien identifiable : propriété
+intellectuelle, droit électoral, aviation civile, protection pénale de
+l'enfant, statut personnel, et `convention-2012-fr` — qui est une convention
+**minière** malgré son nom.
+
+À cette largeur, le filtre ne retire que 9 % du corpus : il protège surtout
+contre les hors-sujet francs. Si les réponses se diluent, retirer le rang
+`peripherique` ramène à 27 documents et 7 677 chunks en une passe.
+
+Les rangs ont été établis en mesurant, document par document, la proportion de
+chunks contenant un terme maritime ou halieutique, puis en lisant les passages
+correspondants — un pourcentage seul ne dit pas si le lien est pertinent. Ce
+tri a d'ailleurs corrigé deux erreurs d'intuition : le recueil environnement
+est le deuxième plus dense du corpus (39,4 %), et la fonction publique porte
+le statut de la **Garde Côtes**, placée sous l'autorité du ministre des
+Pêches.
+
+Le filtre s'applique aussi au **catalogue** : la liste déroulante de
+l'interface ne propose que les documents du périmètre, et nommer explicitement
+un document hors périmètre lève une erreur claire plutôt que de renvoyer zéro
+passage sans explication.
+
+Trois cas dégradés retombent tous sur le corpus entier plutôt que sur un
+corpus vide — fichier absent, `actif` à `false`, liste vide (signalée par un
+avertissement). Un JSON cassé, lui, est refusé : mieux vaut échouer au
+démarrage que chercher dans un périmètre dont on ignore la forme.
+
 ### La reformulation de requête
 
 L'utilisateur écrit « est-ce qu'on peut virer une femme enceinte ? », le code

@@ -60,6 +60,8 @@ data/*
 # Le registre des statuts est un travail de qualification juridique fait a
 # la main, pas une donnee generee : le perdre couterait cher.
 !data/statuts.json
+# Perimetre d'interrogation : petit, et il decrit ce que le service repond.
+!data/perimetre.json
 
 # Artefacts de build (pip install -e .)
 *.egg-info/

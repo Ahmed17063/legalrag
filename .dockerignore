@@ -16,6 +16,7 @@ secrets/
 #     besoin ni de l'index local, ni du corpus, ni du cache. -------------
 data/
 !data/statuts.json
+!data/perimetre.json
 Documents_juridiques/
 logs/
 rapport_*.txt

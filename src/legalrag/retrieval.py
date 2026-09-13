@@ -33,6 +33,7 @@ from typing import Any
 from qdrant_client import QdrantClient, models
 
 from .config import Settings
+from .perimetre import Perimetre
 from .statuts import FicheStatut, RegistreStatuts, Statut, mentionne_une_abrogation
 from .voyage_http import VoyageTransport
 
@@ -245,6 +246,7 @@ class Retriever:
         )
         self._client = _make_client(settings)
         self._registre = RegistreStatuts.charger(settings.statuts_file)
+        self._perimetre = Perimetre.charger(settings.perimetre_file)
 
     # -- cycle de vie ------------------------------------------------------
 
@@ -375,7 +377,42 @@ class Retriever:
             if offset is None:
                 break
 
-        return sorted(compte.values(), key=lambda d: -d["chunks"])
+        # Le perimetre s'applique aussi au catalogue : proposer dans
+        # l'interface un document que la recherche refusera d'ouvrir ne
+        # menerait qu'a une erreur.
+        retenus = [d for d in compte.values() if self._perimetre.autorise(d["document_id"])]
+        return sorted(retenus, key=lambda d: -d["chunks"])
+
+    def _filtre(self, document_id: str | None) -> models.Filter | None:
+        """Filtre Qdrant combinant le perimetre et le document demande.
+
+        Les deux se cumulent : un document hors perimetre ne devient pas
+        interrogeable parce qu'on le nomme explicitement. L'appelant est
+        prevenu plutot que de recevoir zero resultat sans explication.
+        """
+        conditions: list[models.FieldCondition] = []
+
+        if document_id:
+            if not self._perimetre.autorise(document_id):
+                raise ValueError(
+                    f"Le document {document_id!r} est hors du perimetre courant "
+                    f"({self._perimetre.libelle or 'restreint'}). "
+                    f"Voir {self._settings.perimetre_file}."
+                )
+            conditions.append(
+                models.FieldCondition(
+                    key="document_id", match=models.MatchValue(value=document_id)
+                )
+            )
+        elif self._perimetre:
+            conditions.append(
+                models.FieldCondition(
+                    key="document_id",
+                    match=models.MatchAny(any=sorted(self._perimetre.documents)),
+                )
+            )
+
+        return models.Filter(must=conditions) if conditions else None
 
     # -- recherche ---------------------------------------------------------
 
@@ -409,15 +446,7 @@ class Retriever:
         vecteur, tokens = self.embed_query(requete)
         result.tokens_billed += tokens
 
-        filtre = None
-        if document_id:
-            filtre = models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="document_id", match=models.MatchValue(value=document_id)
-                    )
-                ]
-            )
+        filtre = self._filtre(document_id)
 
         hits = self._client.query_points(
             self._settings.qdrant_collection,

@@ -201,6 +201,13 @@ class FauxQdrant:
         self.filtres.append(query_filter)
         return FauxReponse(self._points[:limit])
 
+    def scroll(self, collection, limit=100, offset=None, with_payload=True, with_vectors=False):
+        """Parcours pagine, comme QdrantClient : (points, offset suivant)."""
+        debut = offset or 0
+        tranche = self._points[debut : debut + limit]
+        suivant = debut + limit if debut + limit < len(self._points) else None
+        return tranche, suivant
+
     def close(self):
         self.ferme = True
 

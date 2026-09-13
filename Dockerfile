@@ -2,8 +2,9 @@
 #
 # Le serveur interroge Qdrant Cloud, Voyage et Groq par le reseau : il n'a
 # besoin ni de l'index Parquet, ni du corpus, ni du cache de telechargement.
-# Seul `data/statuts.json` est embarque, parce qu'il est petit et qu'il porte
-# la qualification juridique des textes.
+# Seuls `data/statuts.json` et `data/perimetre.json` sont embarques : petits,
+# et ils portent la qualification juridique des textes et le perimetre
+# interrogeable.
 #
 # Construction en deux etapes : les dependances sont installees dans une
 # image qui contient uv et les outils de compilation, puis seul le
@@ -70,6 +71,9 @@ COPY --chown=legalrag:legalrag src/ ./src/
 # Registre des statuts juridiques : petit, et necessaire pour signaler les
 # textes abroges. Montez-le en volume pour le modifier sans reconstruire.
 COPY --chown=legalrag:legalrag data/statuts.json ./data/statuts.json
+# Perimetre d'interrogation. Montez-le en volume pour l'elargir sans
+# reconstruire l'image.
+COPY --chown=legalrag:legalrag data/perimetre.json ./data/perimetre.json
 
 USER legalrag
 

@@ -139,6 +139,11 @@ class Settings:
     # defaut, quelle qu'elle soit. Voir generation.py.
     generation_temperature: float = 0.1
 
+    # Restreint la recherche a un sous-ensemble de documents (la peche,
+    # par exemple). Applique a l'interrogation, jamais a l'index : rien
+    # n'est supprime, et lever la restriction est immediat.
+    perimetre_file: Path = Path("./data/perimetre.json")
+
     # Reformulation de la question avant la recherche vectorielle. La
     # temperature y est plus haute : on cherche de la variete lexicale,
     # l'inverse du besoin de la redaction. Voir reformulation.py.
@@ -301,6 +306,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         retrieval_top_k=_env_int("RETRIEVAL_TOP_K", 25),
         retrieval_top_n=_env_int("RETRIEVAL_TOP_N", 5),
         statuts_file=Path(_env("STATUTS_FILE", "./data/statuts.json")).expanduser(),
+        perimetre_file=Path(_env("PERIMETRE_FILE", "./data/perimetre.json")).expanduser(),
         groq_api_key=_env("GROQ_API_KEY"),
         generation_model=_env("GENERATION_MODEL", "openai/gpt-oss-120b"),
         generation_max_tokens=_env_int("GENERATION_MAX_TOKENS", 2048),
