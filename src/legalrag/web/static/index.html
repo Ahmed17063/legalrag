@@ -89,6 +89,10 @@
     align-items: center;
     gap: 8px;
   }
+  /* `display` ci-dessus l'emporte sur la feuille du navigateur : sans cette
+     regle, l'attribut `hidden` ne cache plus rien et un menu vide s'affiche
+     quand aucun modele n'est disponible. */
+  .bloc-modele[hidden] { display: none; }
   select {
     font: inherit;
     padding: 6px 10px;
@@ -335,7 +339,7 @@
     <label for="doc">Rechercher dans :</label>
     <select id="doc"><option value="">Tous les documents</option></select>
     <span class="bloc-modele" id="bloc-modele" hidden>
-      <label for="modele">Rédigé par :</label>
+      <label for="modele">Modèle :</label>
       <select id="modele"></select>
     </span>
     <span id="etat-service"></span>

@@ -287,6 +287,28 @@ def test_consigne_demande_de_signaler_l_absence_de_droit_national():
     assert "n'a pas ete retrouve" in consigne_a_plat()
 
 
+def test_consigne_hierarchise_les_ordres_juridiques():
+    """Sur la peche, le corpus melange droit mauritanien, accords FAO/ICCAT,
+    avis du TIDM et reglements europeens. Sans ordre de priorite explicite,
+    le modele repondait avec le texte le mieux score, souvent un reglement
+    europeen, alors que le Code des peches mauritanien fait foi."""
+    consigne = consigne_a_plat()
+    # Le droit national passe avant, l'europeen ferme la marche.
+    assert consigne.index("droit mauritanien (constitution") < consigne.index(
+        "reglements de l'union europeenne"
+    )
+    # consigne_a_plat() ecrase les retours a la ligne de la mise en forme :
+    # les reperes se cherchent donc sur une seule ligne.
+    for reference in ("code des peches", "fao", "iccat", "tidm", "1005/2008"):
+        assert reference in consigne, reference
+
+
+def test_consigne_refuse_de_presenter_un_reglement_ue_comme_la_regle_nationale():
+    consigne = consigne_a_plat()
+    assert "ne s'appliquent pas en mauritanie" in consigne
+    assert "jamais comme la regle mauritanienne" in consigne
+
+
 def test_plafond_de_sortie_suffisant(settings):
     """Une reponse juridique detaillee depasse 1024 tokens : la precedente
     valeur tronquait la reponse au milieu d'une phrase."""

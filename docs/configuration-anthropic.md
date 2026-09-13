@@ -141,7 +141,7 @@ curl -s http://127.0.0.1:8000/api/health
 ```
 
 Le champ `modeles` doit contenir deux entrées, `groq` et `claude`. Dans la
-page, un menu **« Rédigé par »** apparaît à côté du filtre par document.
+page, un menu **« Modèle »** apparaît à côté du filtre par document.
 
 ### 5.3 Une vraie réponse
 
