@@ -68,3 +68,7 @@ dist/
 
 # Corpus PDF source (volumineux, non versionne)
 Documents_juridiques/
+
+# Prototypes anterieurs (Groq, Ollama, modele Hassania) : conserves en local
+# comme aide-memoire, hors du depot car susceptibles de contenir des cles.
+old/
