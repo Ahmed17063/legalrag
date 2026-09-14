@@ -348,13 +348,97 @@ class Retriever:
         ]
         return classes, int(data.get("usage", {}).get("total_tokens", 0))
 
+    # Assez de points pour croiser chaque document au moins une fois. Mesure
+    # sur la collection : 512 suffisaient pour les 43 documents, 1024 laisse
+    # de la marge si la repartition change.
+    ECHANTILLON_LIBELLES = 1024
+
     def documents(self) -> list[dict[str, Any]]:
         """Documents presents dans la collection, avec leur nombre de chunks.
 
-        Sert a alimenter le filtre de l'interface. La collection tient en
-        quelques centaines de points : un parcours complet est moins couteux
-        qu'une agregation, et fonctionne sur toutes les versions de Qdrant.
+        Sert a alimenter le filtre de l'interface, et c'est appele au
+        demarrage du serveur : sa duree est payee a chaque demarrage a froid.
+        Le parcours complet des 12 000 points prenait 8 secondes, soit les
+        deux tiers du demarrage. L'agregation cote serveur les ramene a une
+        seconde et demie.
         """
+        try:
+            compte = self._compter_par_facettes()
+        except Exception as exc:  # noqa: BLE001 - toute cause justifie le repli
+            # Qdrant local embarque, serveur ancien, client sans la methode :
+            # peu importe la raison, le parcours complet reste correct.
+            logger.debug("Facettes indisponibles (%s) : parcours complet.", exc)
+            compte = self._compter_par_parcours()
+
+        # Le perimetre s'applique aussi au catalogue : proposer dans
+        # l'interface un document que la recherche refusera d'ouvrir ne
+        # menerait qu'a une erreur.
+        retenus = [d for d in compte.values() if self._perimetre.autorise(d["document_id"])]
+        return sorted(retenus, key=lambda d: -d["chunks"])
+
+    def _compter_par_facettes(self) -> dict[str, dict[str, Any]]:
+        """Comptes exacts par agregation, libelles par echantillonnage.
+
+        `facet` rend le nombre de chunks de chaque document sans rapatrier
+        les points, mais pas leur intitule lisible. Celui-ci est recolte sur
+        un echantillon, puis complete par une requete ciblee pour les rares
+        documents que l'echantillon n'aurait pas croises.
+        """
+        facettes = self._client.facet(
+            collection_name=self._settings.qdrant_collection,
+            key="document_id",
+            limit=1000,
+        )
+        compte = {
+            str(h.value): {"document_id": str(h.value), "document": str(h.value), "chunks": h.count}
+            for h in facettes.hits
+        }
+        if not compte:
+            raise ValueError("aucune facette renvoyee")
+
+        points, _ = self._client.scroll(
+            self._settings.qdrant_collection,
+            limit=self.ECHANTILLON_LIBELLES,
+            with_payload=["document", "document_id"],
+            with_vectors=False,
+        )
+        for point in points:
+            charge = point.payload or {}
+            entree = compte.get(str(charge.get("document_id")))
+            if entree is not None and charge.get("document"):
+                entree["document"] = charge["document"]
+
+        self._completer_libelles(compte)
+        return compte
+
+    def _completer_libelles(self, compte: dict[str, dict[str, Any]]) -> None:
+        """Rattrape les documents absents de l'echantillon, un par un.
+
+        Sans cela, un document trop petit pour y figurer s'afficherait sous
+        son identifiant technique. Le cas est rare : la boucle ne fait
+        generalement aucun tour.
+        """
+        for cle, entree in compte.items():
+            if entree["document"] != cle:
+                continue
+            points, _ = self._client.scroll(
+                self._settings.qdrant_collection,
+                scroll_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="document_id", match=models.MatchValue(value=cle)
+                        )
+                    ]
+                ),
+                limit=1,
+                with_payload=["document"],
+                with_vectors=False,
+            )
+            if points and (points[0].payload or {}).get("document"):
+                entree["document"] = points[0].payload["document"]
+
+    def _compter_par_parcours(self) -> dict[str, dict[str, Any]]:
+        """Repli : parcours complet de la collection."""
         compte: dict[str, dict[str, Any]] = {}
         offset = None
         while True:
@@ -376,12 +460,7 @@ class Retriever:
                 entree["chunks"] += 1
             if offset is None:
                 break
-
-        # Le perimetre s'applique aussi au catalogue : proposer dans
-        # l'interface un document que la recherche refusera d'ouvrir ne
-        # menerait qu'a une erreur.
-        retenus = [d for d in compte.values() if self._perimetre.autorise(d["document_id"])]
-        return sorted(retenus, key=lambda d: -d["chunks"])
+        return compte
 
     def _filtre(self, document_id: str | None) -> models.Filter | None:
         """Filtre Qdrant combinant le perimetre et le document demande.

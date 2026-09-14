@@ -18,6 +18,7 @@ Deux contraintes ont dicte la conception :
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -42,6 +43,13 @@ STATIC_DIR = Path(__file__).parent / "static"
 # facon pas de paralleliser, et cela evite que deux requetes simultanees
 # se disputent le limiteur.
 _verrou = threading.Lock()
+
+# Combien de temps une requete accepte d'attendre son tour avant d'etre
+# refusee. Sans cette borne, les requetes s'empilent indefiniment : sur un
+# hebergement facture a la seconde de requete, chacune est payee pendant
+# toute son attente, et le client finit par expirer sans rien recevoir.
+# Mieux vaut un refus immediat et explicite.
+ATTENTE_MAX_VERROU = float(os.environ.get("LEGALRAG_ATTENTE_MAX", "20"))
 
 
 class Question(BaseModel):
@@ -165,7 +173,18 @@ def ask(payload: Question) -> JSONResponse:
     debut = time.monotonic()
     question = payload.question.strip()
 
-    with _verrou:
+    if not _verrou.acquire(timeout=ATTENTE_MAX_VERROU):
+        # 503 et non 429 : ce n'est pas un quota depasse, c'est le service
+        # qui est momentanement occupe. Retry-After invite a reessayer.
+        logger.warning("Requete refusee : une recherche est deja en cours.")
+        raise HTTPException(
+            503,
+            "Une recherche est deja en cours. Le service traite une question "
+            "a la fois ; reessayez dans une minute.",
+            headers={"Retry-After": "60"},
+        )
+
+    try:
         try:
             resultat = etat.retriever.search(
                 question,
@@ -203,6 +222,10 @@ def ask(payload: Question) -> JSONResponse:
         except GenerationError as exc:
             logger.exception("Generation en echec")
             raise HTTPException(502, f"Redaction impossible : {exc}") from exc
+    finally:
+        # Y compris sur le retour anticipe sans generation, et sur toute
+        # exception : un verrou non relache bloquerait l'instance a vie.
+        _verrou.release()
 
     donnees = reponse.as_dict()
     donnees["duree"] = round(time.monotonic() - debut, 1)

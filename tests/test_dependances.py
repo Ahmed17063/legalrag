@@ -306,3 +306,21 @@ def test_aucune_dependance_heritee_de_l_ancienne_implementation(interdit):
     necessaire, et aucun ne doit reapparaitre par inadvertance.
     """
     assert not any(interdit in nom for nom in toutes_les_dependances())
+
+
+def test_le_conteneur_ecoute_le_port_impose_par_l_hebergeur():
+    """Cloud Run et consorts injectent PORT et imposent leur port d'ecoute.
+
+    Un serveur qui ecouterait sur un port fixe serait declare en echec au
+    demarrage, sans message clair.
+    """
+    dockerfile = (RACINE / "Dockerfile").read_text(encoding="utf-8")
+
+    commande = next(
+        ligne for ligne in dockerfile.splitlines() if ligne.startswith("CMD")
+    )
+    assert "$PORT" in commande or "${PORT" in commande, (
+        f"la commande de demarrage ignore PORT : {commande}"
+    )
+    # Une variable propre au projet ne serait pas alimentee par l'hebergeur.
+    assert "LEGALRAG_PORT" not in dockerfile

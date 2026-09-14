@@ -325,3 +325,49 @@ def test_modele_inconnu_refuse_avant_la_recherche(client):
     assert "mistral" in r.json()["detail"]
     assert module_web.etat.retriever.appels == []
     assert module_web.etat.generator.demandes == []
+
+
+# ---------------------------------------------------------------------------
+# Deploiement : attente bornee et port impose par l'hebergeur
+# ---------------------------------------------------------------------------
+
+
+def test_requete_refusee_si_une_recherche_est_en_cours(client, monkeypatch):
+    """Sans borne, les requetes s'empilent : sur un hebergement facture a la
+    seconde de requete, chacune est payee pendant toute son attente."""
+    monkeypatch.setattr(module_web, "ATTENTE_MAX_VERROU", 0.05)
+    module_web._verrou.acquire()
+    try:
+        r = client.post("/api/ask", json={"question": "Une question"})
+    finally:
+        module_web._verrou.release()
+
+    assert r.status_code == 503
+    assert r.headers.get("Retry-After") == "60"
+    assert "deja en cours" in r.json()["detail"]
+
+
+def test_le_verrou_est_relache_apres_une_reponse(client):
+    """Un verrou non relache bloquerait l'instance a vie."""
+    assert client.post("/api/ask", json={"question": "Une question"}).status_code == 200
+    assert module_web._verrou.acquire(timeout=0.1)
+    module_web._verrou.release()
+
+
+def test_le_verrou_est_relache_sans_generation(client, monkeypatch):
+    """Le retour anticipe sans generateur passe aussi par le `finally`."""
+    monkeypatch.setattr(module_web.etat, "generator", None)
+
+    assert client.post("/api/ask", json={"question": "Une question"}).status_code == 200
+    assert module_web._verrou.acquire(timeout=0.1)
+    module_web._verrou.release()
+
+
+def test_le_verrou_est_relache_apres_un_echec(client, monkeypatch):
+    monkeypatch.setattr(
+        module_web.etat, "generator", FauxGenerator(erreur=GenerationError("quota"))
+    )
+
+    assert client.post("/api/ask", json={"question": "Une question"}).status_code == 502
+    assert module_web._verrou.acquire(timeout=0.1)
+    module_web._verrou.release()

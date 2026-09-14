@@ -81,16 +81,22 @@ EXPOSE 8000
 
 # Le conteneur repond a l'exterieur : 127.0.0.1, le defaut de la commande,
 # ne serait joignable que depuis le conteneur lui-meme.
+#
+# Le port vient de PORT, et non d'une variable propre au projet : c'est la
+# variable que les hebergeurs de conteneurs injectent pour imposer leur port
+# d'ecoute — Cloud Run y met 8080. Un serveur qui ecouterait ailleurs serait
+# declare en echec au demarrage. La valeur ci-dessous n'est qu'un defaut
+# local, ecrase a l'execution.
 ENV LEGALRAG_HOST=0.0.0.0 \
-    LEGALRAG_PORT=8000
+    PORT=8000
 
 # La sonde interroge le point de sante, qui verifie la connexion a Qdrant.
 # start-period genereux : l'ouverture de la collection prend quelques
 # secondes au demarrage.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=3 \
-    CMD curl -fsS "http://127.0.0.1:${LEGALRAG_PORT}/api/health" \
+    CMD curl -fsS "http://127.0.0.1:${PORT:-8000}/api/health" \
         | grep -q '"pret": *true' || exit 1
 
 # Aucun secret n'est embarque : VOYAGE_API_KEY, GROQ_API_KEY, QDRANT_URL et
 # QDRANT_API_KEY sont fournis a l'execution, par --env-file ou -e.
-CMD ["sh", "-c", "legalrag serve --host \"$LEGALRAG_HOST\" --port \"$LEGALRAG_PORT\""]
+CMD ["sh", "-c", "legalrag serve --host \"$LEGALRAG_HOST\" --port \"${PORT:-8000}\""]
