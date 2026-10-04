@@ -168,6 +168,17 @@
   .reponse .corps ol { margin: 0 0 10px; padding-left: 22px; }
   .reponse .corps li { margin-bottom: 5px; }
   .reponse .corps li::marker { color: var(--vert); }
+  /* Un tableau large défile dans son cadre plutôt que d'élargir la page. */
+  .reponse .corps .tableau { overflow-x: auto; margin: 0 0 10px; }
+  .reponse .corps table { border-collapse: collapse; width: 100%; font-size: .94em; }
+  .reponse .corps th,
+  .reponse .corps td {
+    border: 1px solid var(--bordure);
+    padding: 7px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .reponse .corps th { background: #f0f4f1; color: var(--vert-fonce); }
   .reponse .corps code {
     background: #f0f4f1;
     border-radius: 4px;
@@ -486,7 +497,7 @@ function enLigne(echappe) {
 
 /**
  * Rend le Markdown produit par le modèle : gras, italique, listes à puces
- * et numérotées. L'échappement HTML est fait AVANT toute mise en forme,
+ * et numérotées, tableaux. L'échappement HTML est fait AVANT toute mise en forme,
  * donc rien de ce que renvoie le modèle ne peut injecter de balise.
  */
 function rendreMarkdown(texte) {
@@ -505,8 +516,40 @@ function rendreMarkdown(texte) {
     if (liste) { sortie.push(`</${liste}>`); liste = null; }
   };
 
+  // Tableau : des lignes consécutives qui commencent par `|`. La ligne de
+  // tirets (|---|---|) sépare l'en-tête du corps ; sans elle, tout est corps.
+  let tableau = [];
+  const cellules = l => l.replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
+  // Le modèle écrit <br> pour aller à la ligne dans une cellule. Il arrive
+  // ici échappé ; seule cette forme exacte est rétablie, rien d'autre.
+  const cellule = c => enLigne(c).replace(/&lt;br\s*\/?&gt;/gi, "<br>");
+  const viderTableau = () => {
+    if (!tableau.length) return;
+    const rangees = tableau.map(cellules);
+    tableau = [];
+    const estSeparateur = r => r.every(c => /^:?-{2,}:?$/.test(c));
+    const coupe = rangees.findIndex(estSeparateur);
+    const tete = coupe > 0 ? rangees.slice(0, coupe) : [];
+    const corps = rangees.slice(coupe + 1).filter(r => !estSeparateur(r));
+    const rangee = (r, balise) =>
+      `<tr>${r.map(c => `<${balise}>${cellule(c)}</${balise}>`).join("")}</tr>`;
+    sortie.push(
+      '<div class="tableau"><table>'
+      + (tete.length ? `<thead>${tete.map(r => rangee(r, "th")).join("")}</thead>` : "")
+      + `<tbody>${corps.map(r => rangee(r, "td")).join("")}</tbody>`
+      + "</table></div>"
+    );
+  };
+
   for (const ligne of lignes) {
     const nu = ligne.trim();
+
+    if (nu.startsWith("|")) {
+      viderParagraphe(); fermerListe();
+      tableau.push(nu);
+      continue;
+    }
+    viderTableau();
 
     if (!nu) { viderParagraphe(); fermerListe(); continue; }
 
@@ -529,6 +572,7 @@ function rendreMarkdown(texte) {
 
   viderParagraphe();
   fermerListe();
+  viderTableau();
   return sortie.join("");
 }
 

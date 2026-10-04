@@ -124,6 +124,52 @@ def test_texte_simple_reste_lisible(rendre):
 
 
 # ---------------------------------------------------------------------------
+# Tableaux
+# ---------------------------------------------------------------------------
+
+TABLEAU = (
+    "**Sanctions encourues**\n"
+    "\n"
+    "| Infraction | Sanction prevue |\n"
+    "|------------|-----------------|\n"
+    "| **Infraction tres grave** (Art. 84) | - 100 000 a 800 000 Ouguiya <br> - Confiscation [1] |\n"
+    "| Navire etranger | - 1 000 000 Ouguiya |\n"
+    "\n"
+    "Suite du texte."
+)
+
+
+def test_tableau_rendu(rendre):
+    """Les barres verticales apparaissaient telles quelles dans la page."""
+    rendu = rendre(TABLEAU)
+    assert "<thead><tr><th>Infraction</th><th>Sanction prevue</th></tr></thead>" in rendu
+    assert rendu.count("<tr>") == 3
+    assert "<td><strong>Infraction tres grave</strong> (Art. 84)</td>" in rendu
+    assert "|" not in rendu
+    assert "---" not in rendu
+    assert "<p>Suite du texte.</p>" in rendu
+
+
+def test_saut_de_ligne_dans_une_cellule(rendre):
+    rendu = rendre(TABLEAU)
+    assert "800 000 Ouguiya <br> - Confiscation" in rendu
+    assert "&lt;br" not in rendu
+    assert '<span class="renvoi">1</span>' in rendu
+
+
+def test_tableau_sans_ligne_de_tirets(rendre):
+    rendu = rendre("| a | b |\n| c | d |")
+    assert "<thead>" not in rendu
+    assert rendu.count("<td>") == 4
+
+
+def test_balise_dans_une_cellule_echappee(rendre):
+    rendu = rendre("| a |\n|---|\n| <img src=x onerror=alert(1)> <br onload=x> |")
+    assert "<img" not in rendu
+    assert "<br onload" not in rendu
+
+
+# ---------------------------------------------------------------------------
 # Securite : le modele ne doit jamais pouvoir injecter de balise
 # ---------------------------------------------------------------------------
 
