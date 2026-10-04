@@ -6,8 +6,9 @@
 #
 # Les cles ne figurent pas ici : `sync: false` les fait demander par Render
 # a la creation du service, et elles restent hors du depot.
-# ANTHROPIC_API_KEY n'est deliberement pas declaree : sur un lien public,
-# seul Groq, gratuit, doit pouvoir etre sollicite.
+# ANTHROPIC_API_KEY est facturee a chaque question posee avec Claude, sur un
+# lien public : n'y mettre qu'une cle d'un espace de travail dont la depense
+# est plafonnee. Groq, gratuit, reste le modele par defaut.
 
 services:
   - type: web
@@ -25,6 +26,8 @@ services:
       - key: QDRANT_URL
         sync: false
       - key: QDRANT_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
         sync: false
       - key: CORPUS_SOURCE
         value: drive
