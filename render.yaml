@@ -1,0 +1,32 @@
+# Deploiement de demonstration sur Render, palier gratuit.
+#
+# Render construit l'image depuis le Dockerfile et injecte PORT, que le
+# conteneur honore deja. Une seule instance : un seul limiteur de debit,
+# conforme aux plafonds Voyage.
+#
+# Les cles ne figurent pas ici : `sync: false` les fait demander par Render
+# a la creation du service, et elles restent hors du depot.
+# ANTHROPIC_API_KEY n'est deliberement pas declaree : sur un lien public,
+# seul Groq, gratuit, doit pouvoir etre sollicite.
+
+services:
+  - type: web
+    name: legalrag
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: feature/rag-chatbot-core
+    healthCheckPath: /api/health
+    envVars:
+      - key: VOYAGE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: CORPUS_SOURCE
+        value: drive
+      - key: GENERATION_DEFAULT
+        value: groq
