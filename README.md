@@ -80,14 +80,6 @@ uv run pytest
 443 tests, none of which call the network. They cover file-name parsing,
 chunking across pages, batching, chunk/vector pairing and crash recovery.
 
-## Limitations
-
-- No reference Q&A set yet. Without one, the embedding model choice, the
-  benefit of query rewriting and the Groq vs Claude comparison remain
-  unmeasured.
-- Each answer takes one to two minutes on a free Voyage account, which is
-  capped at 3 requests per minute.
-
 ## Documentation
 
 The full design notes, setup guides and trade-offs are in French:
