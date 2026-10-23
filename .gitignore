@@ -43,7 +43,7 @@ dist-ssr
 .uv/
 
 # Réglages Claude Code personnels
-.claude/settings.local.json
+.claude/
 
 # Secrets : cles d'API et credentials Google (JAMAIS commites)
 .env

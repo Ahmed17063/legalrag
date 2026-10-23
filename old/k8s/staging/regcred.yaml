@@ -1,8 +1,0 @@
-apiVersion: v1
-data:
-  .dockerconfigjson: ewogICJhdXRocyI6IHsKICAgICJyZWdpc3RyeS5naXRsYWIuY29tIjogewogICAgICAidXNlcm5hbWUiOiAiZWxoYWRqbW9oYW1lZG91IiwKICAgICAgInBhc3N3b3JkIjogImdscGF0LVF5NUd4NkdOaXliQzU1TF9yc1FOIgogICAgfQogIH0KfQo=
-kind: Secret
-metadata:
-  name: regcred
-  namespace: chatbot
-type: kubernetes.io/dockerconfigjson
