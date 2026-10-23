@@ -186,7 +186,7 @@ legalrag-indexeur@votre-projet.iam.gserviceaccount.com
 Dans l'URL du dossier :
 
 ```
-https://drive.google.com/drive/folders/1TwWEQk33CI9M8v_mdj2gpKPoOKariJm2
+https://drive.google.com/drive/folders/<ID_DU_DOSSIER_DRIVE>
                                         └──────── l'ID est ce segment ────────┘
 ```
 
@@ -198,7 +198,7 @@ Dans le fichier `.env` à la racine du dépôt (créé depuis `.env.example`) :
 
 ```
 GOOGLE_APPLICATION_CREDENTIALS=./secrets/service-account.json
-DRIVE_FOLDER_ID=1TwWEQk33CI9M8v_mdj2gpKPoOKariJm2
+DRIVE_FOLDER_ID=<ID_DU_DOSSIER_DRIVE>
 DRIVE_RECURSIVE=true
 ```
 

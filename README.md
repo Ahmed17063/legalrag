@@ -1,10 +1,63 @@
-# Indexation d'un corpus juridique français
+# legalrag — assistant juridique sourcé sur le droit mauritanien
 
-Pipeline d'embeddings pour un RAG sur des codes et textes de loi français.
+## In English
+
+**legalrag** is an end-to-end retrieval-augmented generation (RAG) system
+that answers questions on Mauritanian law (43 French-language legal codes
+and collections, ~12,000 chunks) with answers that cite the exact passages
+they rely on.
+
+```
+PDF → pages .txt → header/footer removal → page stitching + overlapping chunks
+    → contextual embeddings (voyage-context-4) → Parquet index → Qdrant
+question → LLM query rewriting → vector search → split by legal article
+         → reranking → answer by Groq (gpt-oss-120b) or Claude, with citation checks
+```
+
+Key design choices, each documented below with its rationale:
+
+- **Embedding model chosen on structural grounds, not hype** — compared
+  `voyage-context-4`, `voyage-law-2`, `text-embedding-3-large` and
+  `mistral-embed` (§1); the index refuses to mix vectors from two models.
+- **Statistical boilerplate detection** removes repeated scanned headers
+  before chunking (7.8 % of characters, 378 → 348 chunks on the pilot corpus).
+- **Retrieval tuned to the domain** — chunks are split on article headers
+  before reranking, so the relevant article is not drowned among ~6 others.
+- **Query rewriting measured honestly** — it renews a third to half of the
+  top-25 candidate pool, but the README states plainly that a quality gain
+  is *not* demonstrated without a reference Q&A set.
+- **Guardrails against plausible-but-wrong legal answers** — numbered
+  passages, mandatory citations, post-hoc verification of cited indices,
+  explicit "not in the documents" fallback.
+- **Production hygiene** — resumable, idempotent indexing with atomic
+  Parquet writes; FastAPI web UI; slim non-root Docker image (42 packages
+  instead of 90); 443 tests, none hitting the network.
+
+Stack: Python, uv, Voyage AI, Qdrant, Groq, Anthropic SDK, FastAPI, Docker,
+pytest. The rest of this README is in French.
+
+![Web interface: question box, document filter and model selector](docs/images/accueil.png)
+
+An answer to *"Quels sont les congés payés prévus par le code du travail ?"*
+(what paid leave does the labour code provide?). Every claim carries the
+number of the passage it comes from, and the article numbers are quoted from
+the text:
+
+![Answer with numbered citations](docs/images/reponse.png)
+
+Below the answer: the passages consulted with their relevance scores, and the
+rewritten query actually sent to the vector search:
+
+![Cited passages and rewritten query](docs/images/reponse-sources.png)
+
+---
+
+## Présentation
+
+Chaîne complète de RAG sur des codes et textes de loi mauritaniens, de la
+lecture des documents à la réponse rédigée et sourcée : ingestion, index
+d'embeddings, base vectorielle, recherche, rédaction et interface web.
 Le corpus vit sur Google Drive sous forme de `.txt`, un fichier par page.
-
-**Périmètre de cette étape : de la lecture des documents à la production de
-l'index d'embeddings.** La recherche / le retrieval n'est pas implémenté ici.
 
 ---
 
@@ -21,11 +74,11 @@ Tarifs et spécifications relevés le 6 septembre 2026.
 | `text-embedding-3-large` (OpenAI) | 0,13 | 3072 (réductible) | 8 191 tok | Généraliste multilingue solide, aucune spécialisation juridique. Contexte le plus court du lot |
 | `mistral-embed` | ~0,10 | 1024 | 8 000 tok | Éditeur français, français généraliste correct. Tarif à confirmer : les sources publiques divergent entre 0,06 et 0,10 |
 
-### Recommandation : `voyage-context-4`
+### Choix retenu : `voyage-context-4`
 
 Trois raisons, par ordre d'importance pour ce corpus précis.
 
-**1. Il répond directement au problème de la pagination.** Ton corpus est
+**1. Il répond directement au problème de la pagination.** Le corpus est
 découpé en pages, et un article de code coupé en fin de page produit deux
 fragments incomplets. Un modèle d'embedding classique plonge chaque chunk
 isolément : le fragment « ...est puni de trois ans d'emprisonnement » perd
@@ -34,31 +87,31 @@ chunks d'un document groupés et produit un vecteur par chunk *qui tient
 compte du reste du document*. Le chevauchement entre pages, que ce pipeline
 implémente par ailleurs, cesse d'être la seule ligne de défense.
 
-**2. Le coût est négligeable à ton volume.** À 0,12 $/M tokens, et avec
+**2. Le coût est négligeable à ce volume.** À 0,12 $/M tokens, et avec
 **200 M de tokens offerts** sur les modèles de la série 4, un corpus de
 10 000 pages (~600 tokens par page, ~20 % de recouvrement, soit ~7 M tokens)
-tient entièrement dans le palier gratuit. Même à 100 000 pages tu es à
-environ 8 $. Le budget n'est pas le critère discriminant ici — la qualité de
+tient entièrement dans le palier gratuit. Même à 100 000 pages, le coût reste
+d'environ 8 $. Le budget n'est pas le critère discriminant ici — la qualité de
 restitution l'est.
 
-**3. Les dimensions sont ajustables** (Matryoshka : 256 à 2048). Tu peux
-démarrer en 1024 et redescendre à 512 si le stockage ou la latence de
+**3. Les dimensions sont ajustables** (Matryoshka : 256 à 2048). L'index
+démarre en 1024 et peut redescendre à 512 si le stockage ou la latence de
 recherche devient un sujet, sans changer de modèle.
 
 **Pourquoi pas `voyage-law-2`**, pourtant explicitement « juridique » : c'est
 un modèle de 2024, à contexte deux fois plus court et sans contextualisation.
 Sa spécialisation de domaine ne compense pas, à mon avis, un écart de deux
 générations — d'autant que sa spécialisation a été construite sur du droit
-majoritairement anglophone (*common law*), pas sur du droit civil français.
+majoritairement anglophone (*common law*), pas sur du droit de tradition civiliste rédigé en français.
 
 **Réserve à connaître.** Les chiffres de performance ci-dessus sont ceux
 publiés par l'éditeur, sur ses propres jeux d'évaluation, et je n'ai trouvé
 aucun benchmark indépendant sur du **français juridique** spécifiquement. La
 recommandation repose donc sur des arguments structurels (contextualisation,
 contexte long, multilinguisme) plus que sur une mesure. Avant de figer le
-choix, constitue une cinquantaine de questions-réponses de référence sur ton
-corpus et compare `voyage-context-4` et `mistral-embed` en conditions
-réelles. Le pipeline permet d'en changer par une variable d'environnement, et
+choix, l'étape suivante est de constituer une cinquantaine de
+questions-réponses de référence sur le corpus et de comparer
+`voyage-context-4` et `mistral-embed` en conditions réelles. Le pipeline permet d'en changer par une variable d'environnement, et
 l'index refuse de mélanger deux modèles.
 
 ---
@@ -77,7 +130,7 @@ C'est tout : uv crée le `.venv`, installe les dépendances **et** le projet
 lui-même en mode éditable. Aucune activation n'est nécessaire avec `uv run` :
 
 ```bash
-uv run legalrag ask "ta question"
+uv run legalrag ask "votre question"
 uv run pytest
 ```
 
@@ -136,7 +189,7 @@ job hors ligne. Ne pas versionner ce fichier généré — il divergerait du loc
 nouveau terminal intégré, ce qui permet d'écrire directement :
 
 ```powershell
-uv run legalrag ask "ta question"
+uv run legalrag ask "votre question"
 ```
 
 Le réglage est limité au dossier : le PATH global de la machine n'est pas
@@ -247,13 +300,13 @@ interactif, donc le job tourne sans navigateur ni token à rafraîchir.
 
    ```
    GOOGLE_APPLICATION_CREDENTIALS=./secrets/service-account.json
-   DRIVE_FOLDER_ID=1TwWEQk33CI9M8v_mdj2gpKPoOKariJm2
+   DRIVE_FOLDER_ID=<ID_DU_DOSSIER_DRIVE>
    ```
 
    L'ID du dossier est le segment après `/folders/` dans son URL.
 
 Le scope demandé est `drive.readonly` : le pipeline ne peut rien écrire ni
-supprimer sur ton Drive, même en cas de bug.
+supprimer sur le Drive, même en cas de bug.
 
 ## 5. Débit et plafonds
 
@@ -321,7 +374,7 @@ atomique ni d'append. Écrire l'index au fil de l'eau y imposerait de
 réuploader le fichier entier à chaque lot, sous quota d'API, avec le risque
 qu'une interruption laisse un fichier corrompu — exactement ce que la
 reprise sur incident cherche à éviter. Le disque local est rapide, atomique,
-et le fichier compacté peut être poussé où tu veux **une fois** le job
+et le fichier compacté peut être poussé ailleurs **une fois** le job
 terminé. Écrire sur Drive obligerait par ailleurs à élargir les droits du
 compte de service au-delà de la lecture seule.
 
@@ -435,7 +488,7 @@ Mesuré sur le corpus mauritanien : **7,8 % des caractères** retirés,
 uv run pytest
 ```
 
-67 tests, sans appel réseau. Couvrent le parsing des noms (avec et sans
+443 tests, sans appel réseau. Couvrent le parsing des noms (avec et sans
 horodatage, titres à tirets, pages à plusieurs chiffres, fichiers hors
 convention), le chunking (reconstitution d'un article coupé entre deux
 pages, chevauchement effectif, pages non contiguës), le découpage en lots et
@@ -445,10 +498,10 @@ l'appariement chunk ↔ vecteur, et la reprise après incident.
 
 ```bash
 # Les passages sourcés, sans rédaction
-uv run legalrag search "ta question" --top-k 8 --top-n 3
+uv run legalrag search "votre question" --top-k 8 --top-n 3
 
 # Une réponse rédigée, avec ses sources
-uv run legalrag ask "ta question" --top-k 8 --top-n 3
+uv run legalrag ask "votre question" --top-k 8 --top-n 3
 uv run legalrag ask "..." --show-passages   # + le texte intégral cité
 uv run legalrag ask "..." --modele claude   # rédigée par Claude plutôt que Groq
 uv run legalrag ask "..." --no-reformulation  # chercher la question telle quelle
@@ -643,7 +696,6 @@ uv run legalrag serve
 
 Puis ouvrir <http://127.0.0.1:8000>. Options : `--port`, `--host`,
 `--reload` (rechargement automatique en développement).
-
 La page reprend les couleurs de la charte graphique gouvernementale
 mauritanienne de 2020 — vert `#00A95C`, or `#FFD700`, rouge `#D01C1F` — avec
 les bandes rouges et le croissant du drapeau de 2017.
@@ -766,6 +818,11 @@ Les invoquer avec `/connexion-drive` ou `/connexion-voyage`.
 
 ## 11. Ce qui n'est pas fait
 
-- La **recherche / le retrieval** : hors périmètre de cette étape.
-- L'**évaluation de la qualité** de restitution sur ton corpus, qui reste la
-  seule façon de trancher définitivement le choix du modèle (voir §1).
+- Un **jeu de questions-réponses de référence** sur le corpus. Sans lui,
+  trois questions restent ouvertes, et le README les signale là où elles se
+  posent :
+  - le choix du modèle d'embedding, `voyage-context-4` contre `mistral-embed`
+    (voir §1) ;
+  - le gain réel de la reformulation de requête, dont seul l'effet sur le
+    vivier de candidats est mesuré (voir §9 bis) ;
+  - la qualité des réponses rédigées, Groq contre Claude.
