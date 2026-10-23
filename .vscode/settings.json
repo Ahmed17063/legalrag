@@ -22,7 +22,6 @@
 
   // Les fichiers generes n'ont pas a encombrer l'explorateur ni la recherche.
   "search.exclude": {
-    "old/**": true,
     "data/**": true,
     ".venv/**": true
   }
